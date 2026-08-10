@@ -2,8 +2,7 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine, pool
 
 from alembic import context
 
@@ -24,11 +23,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# A URL real vem das Settings (.env) — assim não duplicamos configuração
-# entre alembic.ini e o resto da aplicação.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
-
 target_metadata = Base.metadata
+
+# A URL real vem das Settings (.env/env vars) e é usada direto (nunca via
+# config.set_main_option/get_main_option) — o Config do Alembic guarda
+# valores num ConfigParser, que trata "%" como caractere especial de
+# interpolação. Senhas de banco geram URL percent-encoded (ex: "%40" pra um
+# "@"), o que quebra o ConfigParser. Construindo a Engine direto aqui,
+# ignoramos esse parser por completo e evitamos o problema.
+DATABASE_URL = get_settings().database_url
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -48,9 +51,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -68,11 +70,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(DATABASE_URL, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(
