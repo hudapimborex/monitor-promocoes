@@ -1,10 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.run_state import finish_run
 from app.core.security import hash_password
 from app.db.models import Category, SearchRun, User
 from app.db.session import get_db
 from main import app
+
+
+def setup_function():
+    finish_run()  # run_state é um singleton global — garante estado limpo entre testes
 
 
 @pytest.fixture()
@@ -96,3 +101,53 @@ def test_run_log_reflects_search_activity(client, db_session):
     assert resp.status_code == 200
     messages = [e["message"] for e in resp.json()["entries"]]
     assert any("Buscando" in m or "Categoria" in m for m in messages)
+
+
+def test_run_log_includes_status(client, db_session):
+    _seed_user_with_category(db_session)
+    client.post("/login", data={"email": "run@example.com", "password": "segredo123"})
+
+    resp = client.get("/run-log")
+    assert resp.status_code == 200
+    status = resp.json()["status"]
+    assert status == {"running": False, "paused": False, "cancel_requested": False}
+
+
+def test_run_now_rejects_when_already_running(client, db_session):
+    from app.core.run_state import start_run
+
+    _seed_user_with_category(db_session)
+    client.post("/login", data={"email": "run@example.com", "password": "segredo123"})
+
+    start_run()  # simula uma busca já em andamento
+    resp = client.post("/run-now")
+    assert resp.headers["location"] == "/?run=already_running"
+
+
+def test_pause_resume_cancel_endpoints_require_login(client, db_session):
+    _seed_user_with_category(db_session)
+    for path in ("/run-pause", "/run-resume", "/run-cancel"):
+        resp = client.post(path)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+
+
+def test_pause_resume_cancel_endpoints_update_status(client, db_session):
+    from app.core.run_state import get_status, start_run
+
+    _seed_user_with_category(db_session)
+    client.post("/login", data={"email": "run@example.com", "password": "segredo123"})
+
+    start_run()
+
+    resp = client.post("/run-pause")
+    assert resp.status_code == 200
+    assert get_status()["paused"] is True
+
+    resp = client.post("/run-resume")
+    assert resp.status_code == 200
+    assert get_status()["paused"] is False
+
+    resp = client.post("/run-cancel")
+    assert resp.status_code == 200
+    assert get_status()["cancel_requested"] is True

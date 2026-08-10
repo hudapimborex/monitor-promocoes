@@ -1,10 +1,16 @@
 import datetime as dt
 
+from app.core.run_state import finish_run, get_status, request_cancel, start_run
 from app.db.models import Category, PriceAlert, PriceHistory, Product, SearchRun, User
 from app.notifications.telegram import TelegramNotifier
+from app.scheduler import jobs as jobs_module
 from app.scheduler.jobs import run_search_for_user
 from app.scraping.firecrawl_client import SearchResponse, SearchResult
 from app.scraping.ingest import normalize_url, url_hash
+
+
+def setup_function():
+    finish_run()  # run_state é um singleton global — garante estado limpo entre testes
 
 
 class StubFirecrawlClient:
@@ -160,3 +166,101 @@ def test_run_search_for_user_marks_search_run_as_error_on_failure(db_session):
     assert len(runs) == 1
     assert runs[0].status == "error"
     assert "simulated failure" in runs[0].error_message
+
+
+def test_run_search_for_user_rejects_when_already_running(db_session):
+    start_run()  # simula uma busca já em andamento
+
+    user = User(email="busy@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+
+    notifier = TelegramNotifier(bot_token="", default_chat_id="")
+    stats = run_search_for_user(db_session, user, object(), notifier)
+
+    assert stats.get("skipped") == "already_running"
+
+
+def test_run_search_for_user_stops_early_when_cancelled(db_session):
+    user = User(email="cancel@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+
+    category = Category(
+        user_id=user.id,
+        slug="porcelanato",
+        name="Porcelanato",
+        priority=1,
+        keywords_json={
+            "base_terms": ["porcelanato"],
+            "discount_terms": ["promoção", "desconto", "oferta"],
+            "sizes": [],
+        },
+    )
+    db_session.add(category)
+    db_session.commit()
+
+    class CancellingClient:
+        def __init__(self):
+            self.calls = 0
+
+        def search(self, query, scrape_top_n=3):
+            self.calls += 1
+            request_cancel()  # cancela assim que a primeira busca roda
+            return SearchResponse(query=query, results=[], credits_used=2.0)
+
+    client = CancellingClient()
+    notifier = TelegramNotifier(bot_token="", default_chat_id="")
+    stats = run_search_for_user(db_session, user, client, notifier)
+
+    assert client.calls == 1  # não chegou a rodar a segunda query
+    assert stats["cancelled"] is True
+    assert get_status()["running"] is False  # finish_run rodou no finally
+
+
+def test_wait_while_paused_or_cancelled_returns_false_when_idle():
+    start_run()
+    try:
+        assert jobs_module._wait_while_paused_or_cancelled() is False
+    finally:
+        finish_run()
+
+
+def test_wait_while_paused_or_cancelled_blocks_then_resumes(monkeypatch):
+    from app.core.run_state import request_pause, request_resume
+
+    start_run()
+    request_pause()
+
+    sleeps = {"n": 0}
+
+    def fake_sleep(seconds):
+        sleeps["n"] += 1
+        if sleeps["n"] >= 2:
+            request_resume()
+
+    monkeypatch.setattr(jobs_module.time, "sleep", fake_sleep)
+
+    try:
+        result = jobs_module._wait_while_paused_or_cancelled()
+        assert result is False
+        assert sleeps["n"] >= 2
+    finally:
+        finish_run()
+
+
+def test_wait_while_paused_or_cancelled_returns_true_if_cancelled_during_pause(monkeypatch):
+    from app.core.run_state import request_pause
+
+    start_run()
+    request_pause()
+
+    def fake_sleep(seconds):
+        request_cancel()
+
+    monkeypatch.setattr(jobs_module.time, "sleep", fake_sleep)
+
+    try:
+        assert jobs_module._wait_while_paused_or_cancelled() is True
+    finally:
+        finish_run()

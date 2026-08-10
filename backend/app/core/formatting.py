@@ -1,4 +1,15 @@
+import re
+import unicodedata
 from typing import Optional
+
+
+def slugify(text: str) -> str:
+    """Vira um slug ASCII simples (usado como identificador único de
+    categoria/item de busca). "Trinco de Porta!" -> "trinco-de-porta"."""
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = text.strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-") or "item"
 
 
 def format_brl(value: float) -> str:

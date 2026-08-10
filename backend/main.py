@@ -14,6 +14,7 @@ from app.api.auth import router as auth_router
 from app.api.subscribe import router as subscribe_router
 from app.core.live_log import install_live_log_handler
 from app.web.auth_web import NotAuthenticatedError
+from app.web.items_routes import router as items_router
 from app.web.login_routes import router as login_router
 from app.web.routes import router as web_router
 from app.web.settings_routes import router as settings_router
@@ -26,6 +27,7 @@ app.include_router(auth_router)
 app.include_router(subscribe_router)
 app.include_router(login_router)
 app.include_router(settings_router)
+app.include_router(items_router)
 app.include_router(web_router)
 
 

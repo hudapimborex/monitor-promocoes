@@ -4,14 +4,20 @@
 
 {% if run_started %}
 <div class="flash ok">
-  Busca iniciada em segundo plano. Isso pode levar alguns minutos — atualize
-  a página pra acompanhar em "Execuções recentes" abaixo.
+  Busca iniciada em segundo plano. Isso pode levar alguns minutos — acompanhe
+  no log ao vivo abaixo.
 </div>
 {% endif %}
+{% if run == "already_running" %}
+<div class="flash err">Já tem uma busca rodando agora — espere terminar ou cancele antes de rodar outra.</div>
+{% endif %}
 
-<form method="post" action="/run-now" style="margin-bottom: 24px;">
-  <button type="submit" class="btn">▶ Rodar análise agora</button>
+<form method="post" action="/run-now" style="display:inline-block; margin-bottom: 24px;">
+  <button type="submit" class="btn" id="btn-run-now">▶ Rodar análise agora</button>
 </form>
+<button type="button" class="btn" id="btn-pause" style="display:none; margin-left:8px; background:#f0ad4e;">⏸ Pausar</button>
+<button type="button" class="btn" id="btn-resume" style="display:none; margin-left:8px;">▶ Retomar</button>
+<button type="button" class="btn" id="btn-cancel" style="display:none; margin-left:8px; background:var(--danger); color:#fff;">⏹ Cancelar</button>
 
 <h2>Log ao vivo</h2>
 <div id="live-log" class="log-box"><span class="log-empty">Aguardando atividade...</span></div>
@@ -83,6 +89,10 @@
 <script>
 (function () {
   const box = document.getElementById("live-log");
+  const btnRunNow = document.getElementById("btn-run-now");
+  const btnPause = document.getElementById("btn-pause");
+  const btnResume = document.getElementById("btn-resume");
+  const btnCancel = document.getElementById("btn-cancel");
   let lastId = 0;
   let gotAny = false;
 
@@ -90,6 +100,26 @@
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function updateButtons(status) {
+    if (!status) return;
+    if (status.running) {
+      btnRunNow.style.display = "none";
+      btnCancel.style.display = "inline-block";
+      if (status.paused) {
+        btnPause.style.display = "none";
+        btnResume.style.display = "inline-block";
+      } else {
+        btnPause.style.display = "inline-block";
+        btnResume.style.display = "none";
+      }
+    } else {
+      btnRunNow.style.display = "inline-block";
+      btnPause.style.display = "none";
+      btnResume.style.display = "none";
+      btnCancel.style.display = "none";
+    }
   }
 
   async function poll() {
@@ -109,10 +139,24 @@
         }
         box.scrollTop = box.scrollHeight;
       }
+      updateButtons(data.status);
     } catch (e) {
       // silencioso — só tenta de novo no próximo poll
     }
   }
+
+  async function sendControl(url) {
+    try {
+      await fetch(url, { method: "POST" });
+    } catch (e) {
+      // silencioso — o próximo poll reflete o estado real de qualquer forma
+    }
+    poll();
+  }
+
+  btnPause.addEventListener("click", () => sendControl("/run-pause"));
+  btnResume.addEventListener("click", () => sendControl("/run-resume"));
+  btnCancel.addEventListener("click", () => sendControl("/run-cancel"));
 
   poll();
   setInterval(poll, 1500);

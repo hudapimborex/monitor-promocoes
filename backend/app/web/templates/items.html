@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">&larr; voltar</a></p>
+<h1>Itens de busca</h1>
+<p class="muted">
+  Adicione qualquer item que queira monitorar — pisos, janelas, portas,
+  trincos, qualquer material de construção. Cada item vira uma categoria que
+  entra no rodízio diário de buscas.
+</p>
+
+{% if added %}<div class="flash ok">Item adicionado.</div>{% endif %}
+{% if deleted %}<div class="flash ok">Item removido.</div>{% endif %}
+{% if error == "nome_vazio" %}<div class="flash err">Digite um nome pro item.</div>{% endif %}
+{% if error == "tem_historico" %}<div class="flash err">Esse item já tem histórico de preços — não pode ser excluído, então foi só desativado (não entra mais nas buscas).</div>{% endif %}
+
+<h2>Adicionar item</h2>
+<form method="post" action="/items" class="form-card">
+  <label for="name">Nome do item</label>
+  <input type="text" id="name" name="name" placeholder="ex: trinco de porta, janela de alumínio" required autofocus>
+
+  <label for="discount_terms">Termos de desconto (separados por vírgula)</label>
+  <input type="text" id="discount_terms" name="discount_terms" value="{{ default_discount_terms }}">
+
+  <label for="sizes">Tamanhos/variações (opcional, separados por vírgula)</label>
+  <input type="text" id="sizes" name="sizes" placeholder="ex: 100x100, 120x150">
+
+  <label for="priority">Prioridade no rodízio (1 = mais prioritário)</label>
+  <input type="number" id="priority" name="priority" value="2" min="1" max="99">
+
+  <button type="submit" class="btn">+ Adicionar item</button>
+</form>
+
+<h2>Seus itens</h2>
+{% if items %}
+<table>
+  <tr><th>Nome</th><th>Termos de desconto</th><th>Tamanhos</th><th>Prioridade</th><th>Status</th><th></th></tr>
+  {% for i in items %}
+  <tr>
+    <td>{{ i.name }}</td>
+    <td class="muted">{{ i.discount_terms }}</td>
+    <td class="muted">{{ i.sizes or "—" }}</td>
+    <td>{{ i.priority }}</td>
+    <td>{% if i.active %}✅ ativo{% else %}⏸ pausado{% endif %}</td>
+    <td>
+      <form method="post" action="/items/{{ i.id }}/toggle" style="display:inline;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px;">
+          {% if i.active %}Pausar{% else %}Reativar{% endif %}
+        </button>
+      </form>
+      {% if i.can_delete %}
+      <form method="post" action="/items/{{ i.id }}/delete" style="display:inline;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; background:var(--danger); color:#fff;">Excluir</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nenhum item ainda — adicione acima.</p>
+{% endif %}
+{% endblock %}

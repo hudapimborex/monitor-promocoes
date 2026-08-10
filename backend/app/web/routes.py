@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.formatting import format_brl
 from app.core.live_log import get_entries_since
+from app.core.run_state import get_status, request_cancel, request_pause, request_resume
 from app.core.user_credentials import build_firecrawl_client, build_telegram_notifier
 from app.db.models import Product, User
 from app.db.session import get_db
@@ -64,6 +65,7 @@ def dashboard(
             "products": products,
             "search_runs": search_runs,
             "run_started": run == "started",
+            "run": run,
         },
     )
 
@@ -82,15 +84,37 @@ def run_now(
     termina, então isso é seguro (ver docs do FastAPI sobre
     "Dependencies with yield and background tasks").
     """
+    if get_status()["running"]:
+        return RedirectResponse(url="/?run=already_running", status_code=303)
+
     client = build_firecrawl_client(db, user.id)
     notifier = build_telegram_notifier(db, user.id)
     background_tasks.add_task(run_search_for_user, db, user, client, notifier)
     return RedirectResponse(url="/?run=started", status_code=303)
 
 
+@router.post("/run-pause")
+def run_pause(user: User = Depends(get_current_web_user)):
+    request_pause()
+    return {"ok": True}
+
+
+@router.post("/run-resume")
+def run_resume(user: User = Depends(get_current_web_user)):
+    request_resume()
+    return {"ok": True}
+
+
+@router.post("/run-cancel")
+def run_cancel(user: User = Depends(get_current_web_user)):
+    request_cancel()
+    return {"ok": True}
+
+
 @router.get("/run-log")
 def run_log(since: int = 0, user: User = Depends(get_current_web_user)):
-    """Usado pelo painel (polling via JS) pra mostrar a busca "ao vivo".
+    """Usado pelo painel (polling via JS) pra mostrar a busca "ao vivo" e
+    controlar os botões Pausar/Retomar/Cancelar.
 
     `since`: id da última entrada já recebida pelo cliente — só devolve o
     que é novo, pra caixa de log no painel só ir crescendo em vez de
@@ -100,7 +124,8 @@ def run_log(since: int = 0, user: User = Depends(get_current_web_user)):
     return {
         "entries": [
             {"id": e.id, "time": e.time, "level": e.level, "message": e.message} for e in entries
-        ]
+        ],
+        "status": get_status(),
     }
 
 
