@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">&larr; voltar</a></p>
+<h1>{{ product.name }}</h1>
+<p class="muted">{{ product.store_domain }} — <a href="{{ product.url }}" target="_blank" rel="noopener">abrir oferta</a></p>
+
+<h2>Histórico de preço</h2>
+{% if history %}
+<table>
+  <tr><th>Data</th><th>Preço</th></tr>
+  {% for h in history %}
+  <tr><td>{{ h.captured_at.strftime("%d/%m/%Y %H:%M") }}</td><td>{{ h.price_fmt }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Sem histórico ainda.</p>
+{% endif %}
+{% endblock %}

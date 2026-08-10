@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Monitor de Promoções{% endblock %}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1115; --card: #171a21; --text: #e8e8e8; --muted: #9aa0a6;
+      --accent: #4fd1c5; --danger: #f56565; --border: #2a2e37;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f7f7f8; --card: #ffffff; --text: #1a1a1a; --muted: #666; --border: #e2e2e2; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); padding: 24px;
+    }
+    h1, h2 { margin: 0 0 12px; }
+    a { color: var(--accent); }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; flex: 1; min-width: 180px; }
+    .card .value { font-size: 28px; font-weight: 700; }
+    .card .label { color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 32px; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    .drop { color: var(--danger); font-weight: 600; }
+    .muted { color: var(--muted); }
+    nav { margin-bottom: 24px; }
+    nav a { margin-right: 16px; font-size: 14px; text-decoration: none; }
+    nav a:hover { text-decoration: underline; }
+    .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; max-width: 480px; margin-bottom: 24px; }
+    .form-card label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+    .form-card input { width: 100%; padding: 9px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 14px; }
+    .btn { display: inline-block; margin-top: 16px; padding: 9px 16px; border: none; border-radius: 6px; background: var(--accent); color: #06231f; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .hint { font-size: 12px; color: var(--muted); margin: 0; }
+    .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+    .flash.ok { background: rgba(79,209,197,0.15); color: var(--accent); }
+    .flash.err { background: rgba(245,101,101,0.15); color: var(--danger); }
+    .log-box {
+      background: #05070a; color: #8fe3d8; padding: 14px 16px; border-radius: 8px;
+      max-height: 280px; overflow-y: auto; font-size: 12.5px; line-height: 1.6;
+      font-family: "Cascadia Code", Consolas, monospace; white-space: pre-wrap;
+      word-break: break-word; margin-bottom: 24px; border: 1px solid var(--border);
+    }
+    .log-box .log-empty { color: #556; }
+    .log-box .log-error { color: #ff8787; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/">Painel</a>
+      <a href="/settings">Configurações</a>
+      <a href="/export/csv?type=history">Exportar histórico (CSV)</a>
+      <a href="/export/csv?type=alerts">Exportar alertas (CSV)</a>
+      <a href="/logout">Sair</a>
+    </nav>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

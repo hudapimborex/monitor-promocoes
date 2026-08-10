@@ -1,0 +1,6 @@
+# Dependências extras só para gerar o .exe do app desktop (não precisa
+# disso pra rodar em dev/cloud — ver requirements.txt).
+-r requirements.txt
+pystray==0.19.5
+pillow==12.3.0
+pyinstaller==6.22.0

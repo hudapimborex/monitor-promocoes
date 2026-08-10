@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Monitor de promoções — pisos e revestimentos</h1>
+
+{% if run_started %}
+<div class="flash ok">
+  Busca iniciada em segundo plano. Isso pode levar alguns minutos — atualize
+  a página pra acompanhar em "Execuções recentes" abaixo.
+</div>
+{% endif %}
+
+<form method="post" action="/run-now" style="margin-bottom: 24px;">
+  <button type="submit" class="btn">▶ Rodar análise agora</button>
+</form>
+
+<h2>Log ao vivo</h2>
+<div id="live-log" class="log-box"><span class="log-empty">Aguardando atividade...</span></div>
+
+<div class="cards">
+  <div class="card"><div class="value">{{ products_count }}</div><div class="label">Produtos monitorados</div></div>
+  <div class="card"><div class="value">{{ alerts_count_7d }}</div><div class="label">Quedas reais (últimos 7 dias)</div></div>
+  <div class="card"><div class="value">{{ credits_used }}/{{ credits_budget }}</div><div class="label">Créditos Firecrawl usados no mês</div></div>
+</div>
+
+<h2>Quedas de preço recentes</h2>
+{% if alerts %}
+<table>
+  <tr><th>Produto</th><th>Loja</th><th>De</th><th>Para</th><th>Queda</th><th>Quando</th><th></th></tr>
+  {% for a in alerts %}
+  <tr>
+    <td>{{ a.product.name }}</td>
+    <td>{{ a.product.store_domain }}</td>
+    <td>{{ a.old_price_fmt }}</td>
+    <td>{{ a.new_price_fmt }}</td>
+    <td class="drop">-{{ "%.0f"|format(a.drop_pct) }}%</td>
+    <td class="muted">{{ a.created_at.strftime("%d/%m %H:%M") }}</td>
+    <td><a href="{{ a.product.url }}" target="_blank" rel="noopener">ver oferta</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nenhuma queda real detectada ainda.</p>
+{% endif %}
+
+<h2>Produtos monitorados</h2>
+{% if products %}
+<table>
+  <tr><th>Produto</th><th>Loja</th><th>Preço atual</th><th>Mínimo histórico</th><th>Última checagem</th><th></th></tr>
+  {% for p in products %}
+  <tr>
+    <td><a href="/products/{{ p.id }}">{{ p.name }}</a></td>
+    <td>{{ p.store_domain }}</td>
+    <td>{{ p.current_price_fmt }}</td>
+    <td>{{ p.min_price_fmt }}</td>
+    <td class="muted">{{ p.last_seen_at.strftime("%d/%m %H:%M") }}</td>
+    <td><a href="{{ p.url }}" target="_blank" rel="noopener">abrir</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nenhum produto monitorado ainda — clique em "Rodar análise agora" acima.</p>
+{% endif %}
+
+<h2>Execuções recentes</h2>
+{% if search_runs %}
+<table>
+  <tr><th>Categoria</th><th>Busca</th><th>Status</th><th>Resultados</th><th>Créditos</th><th>Quando</th></tr>
+  {% for r in search_runs %}
+  <tr>
+    <td>{{ r.category.name }}</td>
+    <td>{{ r.query }}</td>
+    <td>{% if r.status == "ok" %}✅{% elif r.status == "error" %}❌ {{ r.error_message }}{% else %}{{ r.status }}{% endif %}</td>
+    <td>{{ r.results_count }}</td>
+    <td>{{ "%.1f"|format(r.credits_used) }}</td>
+    <td class="muted">{{ r.ran_at.strftime("%d/%m %H:%M") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nenhuma busca rodou ainda.</p>
+{% endif %}
+
+<script>
+(function () {
+  const box = document.getElementById("live-log");
+  let lastId = 0;
+  let gotAny = false;
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  async function poll() {
+    try {
+      const resp = await fetch("/run-log?since=" + lastId);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.entries && data.entries.length) {
+        if (!gotAny) {
+          box.innerHTML = "";
+          gotAny = true;
+        }
+        for (const entry of data.entries) {
+          const cls = entry.level === "ERROR" ? "log-error" : "";
+          box.innerHTML += `<div class="${cls}">[${entry.time}] ${escapeHtml(entry.message)}</div>`;
+          lastId = entry.id;
+        }
+        box.scrollTop = box.scrollHeight;
+      }
+    } catch (e) {
+      // silencioso — só tenta de novo no próximo poll
+    }
+  }
+
+  poll();
+  setInterval(poll, 1500);
+})();
+</script>
+{% endblock %}
