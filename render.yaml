@@ -17,6 +17,12 @@ services:
     buildCommand: pip install -r requirements.txt && alembic upgrade head && python scripts/bootstrap.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # Sem isso, o Render usa a versão mais nova do Python disponível (hoje
+      # 3.14), que ainda não tem wheels pré-compiladas pra algumas libs
+      # (ex: pydantic-core) — trava o build. Fixamos na mesma versão usada
+      # em dev (3.12).
+      - key: PYTHON_VERSION
+        value: "3.12.10"
       - key: DATABASE_URL
         sync: false # connection string do Supabase (Postgres) — ver README
       - key: FIRECRAWL_API_KEY
