@@ -75,10 +75,12 @@ class Settings(BaseSettings):
     # Config de categorias/keywords (recurso somente-leitura do bundle)
     categories_config_path: str = str(resource_dir("config", "categories.yml"))
 
-    # Usuário semeado (você). No .exe local não há setup de .env prévio, então
+    # Usuário semeado. Valor genérico de propósito — não coloque e-mail
+    # pessoal aqui; defina o seu real no .env (não versionado) via
+    # BOOTSTRAP_USER_EMAIL. No .exe local não há setup de .env prévio, então
     # usamos um login padrão claramente local — troque a senha em
     # Configurações (/settings) assim que abrir pela primeira vez.
-    bootstrap_user_email: str = "admin@local.app" if IS_FROZEN else "enghudson.hl@gmail.com"
+    bootstrap_user_email: str = "admin@local.app" if IS_FROZEN else "admin@example.com"
     bootstrap_user_password: str = "trocar123" if IS_FROZEN else "change-me"
 
 
