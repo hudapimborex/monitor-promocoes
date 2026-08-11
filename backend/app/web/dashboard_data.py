@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.formatting import format_brl
-from app.db.models import PriceAlert, PriceHistory, Product, SearchRun
+from app.db.models import Coupon, PriceAlert, PriceHistory, Product, SearchRun
 from app.scraping.quota import get_or_create_usage
 
 
@@ -101,6 +101,16 @@ def list_recent_alerts(db: Session, user_id: int, limit: int = 50) -> list[Price
     )
 
 
+def list_recent_coupons(db: Session, user_id: int, limit: int = 30) -> list[Coupon]:
+    return (
+        db.query(Coupon)
+        .filter(Coupon.user_id == user_id)
+        .order_by(Coupon.found_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def dashboard_summary(db: Session, user_id: int) -> dict:
     products_count = db.query(func.count(Product.id)).filter(Product.user_id == user_id).scalar() or 0
 
@@ -112,9 +122,12 @@ def dashboard_summary(db: Session, user_id: int) -> dict:
         or 0
     )
 
+    coupons_count = db.query(func.count(Coupon.id)).filter(Coupon.user_id == user_id).scalar() or 0
+
     usage = get_or_create_usage(db)
     return {
         "products_count": products_count,
         "alerts_count_7d": alerts_7d,
+        "coupons_count": coupons_count,
         "credits_used": round(usage.credits_used, 1),
     }

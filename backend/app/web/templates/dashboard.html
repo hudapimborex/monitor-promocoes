@@ -25,8 +25,28 @@
 <div class="cards">
   <div class="card"><div class="value">{{ products_count }}</div><div class="label">Produtos monitorados</div></div>
   <div class="card"><div class="value">{{ alerts_count_7d }}</div><div class="label">Quedas reais (últimos 7 dias)</div></div>
+  <div class="card"><div class="value">{{ coupons_count }}</div><div class="label">Cupons encontrados</div></div>
   <div class="card"><div class="value">{{ credits_used }}/{{ credits_budget }}</div><div class="label">Créditos Firecrawl usados no mês</div></div>
 </div>
+
+<h2>Cupons de desconto</h2>
+{% if coupons %}
+<table>
+  <tr><th>Código</th><th>Produto</th><th>Loja</th><th>Contexto</th><th>Quando</th><th></th></tr>
+  {% for c in coupons %}
+  <tr>
+    <td><code>{{ c.code }}</code></td>
+    <td>{% if c.product %}{{ c.product.name }}{% else %}—{% endif %}</td>
+    <td>{{ c.store_domain or "—" }}</td>
+    <td class="muted">{{ c.description or "" }}</td>
+    <td class="muted">{{ c.found_at.strftime("%d/%m %H:%M") }}</td>
+    <td><a href="{{ c.source_url }}" target="_blank" rel="noopener">abrir</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nenhum cupom encontrado ainda.</p>
+{% endif %}
 
 <h2>Quedas de preço recentes</h2>
 {% if alerts %}

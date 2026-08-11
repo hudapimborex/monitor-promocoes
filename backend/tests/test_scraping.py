@@ -46,6 +46,20 @@ def test_build_queries_includes_priority_marketplaces_before_sized():
     assert ml_index < sized_index
 
 
+def test_build_queries_includes_coupon_sites_between_marketplaces_and_sized():
+    category = make_category()
+    queries = build_queries(category)
+
+    assert "site:cuponomia.com.br porcelanato cupom desconto" in queries
+    assert "site:pelando.com.br porcelanato cupom desconto" in queries
+    assert "site:meliuz.com.br porcelanato cupom desconto" in queries
+
+    ml_index = queries.index("site:mercadolivre.com.br porcelanato promoção")
+    coupon_index = queries.index("site:cuponomia.com.br porcelanato cupom desconto")
+    sized_index = queries.index("porcelanato 80x80 promoção")
+    assert ml_index < coupon_index < sized_index
+
+
 def test_build_queries_respects_max_queries():
     category = make_category()
     queries = build_queries(category, max_queries=1)

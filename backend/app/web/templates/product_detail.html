@@ -4,6 +4,20 @@
 <h1>{{ product.name }}</h1>
 <p class="muted">{{ product.store_domain }} — <a href="{{ product.url }}" target="_blank" rel="noopener">abrir oferta</a></p>
 
+{% if coupons %}
+<h2>Cupons</h2>
+<table>
+  <tr><th>Código</th><th>Contexto</th><th>Quando</th></tr>
+  {% for c in coupons %}
+  <tr>
+    <td><code>{{ c.code }}</code></td>
+    <td class="muted">{{ c.description or "" }}</td>
+    <td class="muted">{{ c.found_at.strftime("%d/%m/%Y %H:%M") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 <h2>Histórico de preço</h2>
 {% if history %}
 <table>

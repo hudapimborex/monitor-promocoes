@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     marketplace_priority_domains: str = (
         "mercadolivre.com.br,shopee.com.br,cec.com.br,pjotacenter.com.br,mariotelhas.com.br"
     )
+    # Sites agregadores de cupom — busca dedicada por item, prioridade menor
+    # que os marketplaces (consome mais orçamento, então é o primeiro a ser
+    # cortado em dias de cota apertada). Deixe vazio pra desativar.
+    coupon_site_domains: str = "cuponomia.com.br,pelando.com.br,meliuz.com.br"
 
     # Telegram
     telegram_bot_token: str = ""

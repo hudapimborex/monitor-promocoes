@@ -16,7 +16,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Category, PriceHistory, Product, SearchRun, User
+from app.db.models import Category, Coupon, PriceHistory, Product, SearchRun, User
+from app.scraping.coupon_parser import extract_coupon
 from app.scraping.firecrawl_client import SearchResult
 from app.scraping.price_parser import extract_best_price
 
@@ -58,6 +59,38 @@ class IngestOutcome:
     price: Optional[float]
     is_new_product: bool
     price_recorded: bool
+    coupon_code: Optional[str] = None
+
+
+def _maybe_record_coupon(
+    db: Session, user: User, product: Product, domain: str, source_url: str, markdown: str, now
+) -> Optional[str]:
+    """Extrai cupom do mesmo markdown já raspado (sem custo extra). Não
+    duplica se o mesmo código já foi visto antes pra esse produto."""
+    match = extract_coupon(markdown)
+    if match is None:
+        return None
+
+    already_seen = (
+        db.query(Coupon.id)
+        .filter(Coupon.product_id == product.id, Coupon.code == match.code)
+        .first()
+    )
+    if already_seen is not None:
+        return match.code
+
+    db.add(
+        Coupon(
+            user_id=user.id,
+            product_id=product.id,
+            store_domain=domain,
+            code=match.code,
+            description=match.context,
+            source_url=source_url,
+            found_at=now,
+        )
+    )
+    return match.code
 
 
 def ingest_result(
@@ -117,7 +150,13 @@ def ingest_result(
     else:
         logger.info("Não foi possível extrair preço de %s", normalized)
 
+    coupon_code = _maybe_record_coupon(db, user, product, domain, normalized, result.markdown or "", now)
+
     db.commit()
     return IngestOutcome(
-        product=product, price=price, is_new_product=is_new, price_recorded=price_recorded
+        product=product,
+        price=price,
+        is_new_product=is_new,
+        price_recorded=price_recorded,
+        coupon_code=coupon_code,
     )

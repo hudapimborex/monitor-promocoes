@@ -43,6 +43,7 @@ def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotif
         "prices_recorded": 0,
         "alerts": 0,
         "errors": 0,
+        "coupons_found": 0,
     }
 
     if not start_run():
@@ -110,6 +111,16 @@ def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotif
                     outcome = ingest_result(db, user, plan.category, search_run, result)
                     if outcome is None:
                         continue
+
+                    if outcome.coupon_code:
+                        stats["coupons_found"] += 1
+                        logger.info(
+                            "🎟️ Cupom encontrado: %s — %s — %s",
+                            outcome.coupon_code,
+                            outcome.product.name,
+                            outcome.product.store_domain,
+                        )
+
                     if not outcome.price_recorded:
                         logger.info("⚠️ Sem preço identificável: %s", result.url)
                         continue
@@ -137,19 +148,23 @@ def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotif
         if cancelled:
             stats["cancelled"] = True
             logger.info(
-                "🏁 Busca interrompida: %d query(s), %d resultado(s), %d preço(s) gravado(s), %d alerta(s)",
+                "🏁 Busca interrompida: %d query(s), %d resultado(s), %d preço(s) gravado(s), "
+                "%d alerta(s), %d cupom(ns)",
                 stats["queries"],
                 stats["results"],
                 stats["prices_recorded"],
                 stats["alerts"],
+                stats["coupons_found"],
             )
         else:
             logger.info(
-                "🏁 Busca concluída: %d query(s), %d resultado(s), %d preço(s) gravado(s), %d alerta(s)",
+                "🏁 Busca concluída: %d query(s), %d resultado(s), %d preço(s) gravado(s), "
+                "%d alerta(s), %d cupom(ns)",
                 stats["queries"],
                 stats["results"],
                 stats["prices_recorded"],
                 stats["alerts"],
+                stats["coupons_found"],
             )
         return stats
     finally:

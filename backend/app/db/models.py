@@ -149,6 +149,7 @@ class Product(Base):
         back_populates="product", order_by="PriceHistory.captured_at"
     )
     alerts: Mapped[list["PriceAlert"]] = relationship(back_populates="product")
+    coupons: Mapped[list["Coupon"]] = relationship(back_populates="product")
 
 
 class PriceHistory(Base):
@@ -197,6 +198,29 @@ class PriceAlert(Base):
     )
 
     product: Mapped[Product] = relationship(back_populates="alerts")
+
+
+class Coupon(Base):
+    """Código de cupom de desconto — achado de graça no texto já raspado da
+    página (mesma chamada que já extrai preço) ou via busca dedicada em
+    sites agregadores (Cuponomia, Pelando, Méliuz — ver query_builder.py).
+
+    `product_id` fica nulo quando o cupom veio de um site agregador que não
+    corresponde a um produto específico que já rastreamos.
+    """
+
+    __tablename__ = "coupons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    product_id: Mapped[Optional[int]] = mapped_column(ForeignKey("products.id"), nullable=True, index=True)
+    store_domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    code: Mapped[str] = mapped_column(String(50))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str] = mapped_column(Text)
+    found_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    product: Mapped[Optional[Product]] = relationship(back_populates="coupons")
 
 
 class NotificationSettings(Base):

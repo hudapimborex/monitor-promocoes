@@ -29,9 +29,10 @@ from app.web.dashboard_data import (
     get_product_history,
     list_products_with_prices,
     list_recent_alerts,
+    list_recent_coupons,
     list_recent_search_runs,
 )
-from app.web.export import export_alerts_csv, export_history_csv
+from app.web.export import export_alerts_csv, export_coupons_csv, export_history_csv
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
@@ -55,6 +56,7 @@ def dashboard(
 
     products = list_products_with_prices(db, user.id)
     search_runs = list_recent_search_runs(db, user.id)
+    coupons = list_recent_coupons(db, user.id)
 
     return templates.TemplateResponse(
         request,
@@ -64,6 +66,7 @@ def dashboard(
             "alerts": alerts,
             "products": products,
             "search_runs": search_runs,
+            "coupons": coupons,
             "run_started": run == "started",
             "run": run,
         },
@@ -142,8 +145,9 @@ def product_detail(
     if product is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     history = get_product_history(db, product.id)
+    coupons = sorted(product.coupons, key=lambda c: c.found_at, reverse=True)
     return templates.TemplateResponse(
-        request, "product_detail.html", {"product": product, "history": history}
+        request, "product_detail.html", {"product": product, "history": history, "coupons": coupons}
     )
 
 
@@ -155,6 +159,8 @@ def export_csv(
 ):
     if type == "alerts":
         content, filename = export_alerts_csv(db, user.id), "alertas.csv"
+    elif type == "coupons":
+        content, filename = export_coupons_csv(db, user.id), "cupons.csv"
     else:
         content, filename = export_history_csv(db, user.id), "historico_precos.csv"
     return StreamingResponse(

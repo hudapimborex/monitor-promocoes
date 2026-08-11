@@ -24,6 +24,11 @@ real implementada ainda.
    verdade são o preço de sempre (ver `app/pricing/detector.py`).
 4. Alertas confirmados são enviados no Telegram e ficam visíveis no painel
    web (`main.py`) e no export CSV.
+5. Em paralelo, o mesmo texto raspado (`app/scraping/coupon_parser.py`) é
+   varrido atrás de código de cupom — de graça, sem custo extra de crédito —
+   e a busca também inclui sites agregadores de cupom dedicados
+   (`coupon_site_domains`). Cupons achados aparecem no painel e no export
+   CSV (`/export/csv?type=coupons`).
 
 O painel web (`http://localhost:8000` local, ou a URL do Render em produção)
 é protegido por login e tem uma página de **Configurações** (`/settings`)
@@ -178,12 +183,15 @@ Com `FIRECRAWL_SCRAPE_TOP_N=2` (padrão) e orçamento de
 `FIRECRAWL_MONTHLY_CREDIT_BUDGET=900` (deixa margem sobre os 1.000 grátis):
 
 - ~37 buscas/dia cabem confortavelmente no orçamento (900 ÷ 30 dias ÷ 4 créditos/busca).
-- Cada item de busca (`/items`) gera algumas queries: termo genérico +
-  desconto, uma busca dedicada em cada marketplace prioritário
-  (`marketplace_priority_domains` — hoje Mercado Livre e Shopee, via
-  `site:dominio.com.br`) e, se configurado, variações de tamanho — nessa
-  ordem de prioridade, então o que sobra de orçamento sempre cobre o
-  genérico e os marketplaces antes das variações mais específicas.
+- Cada item de busca (`/items`) gera queries nessa ordem de prioridade: (1)
+  termo genérico + desconto, (2) uma busca dedicada em cada domínio de
+  `marketplace_priority_domains` (Mercado Livre, Shopee, C&C, PJ Center,
+  Mário Telhas — via `site:dominio.com.br`), (3) uma busca dedicada em cada
+  domínio de `coupon_site_domains` (Cuponomia, Pelando, Méliuz — atrás de
+  cupom de desconto), (4) variações de tamanho, se configuradas. O que sobra
+  de orçamento sempre cobre os itens antes na lista primeiro — com 8+
+  domínios forçados por item hoje, é comum que (3) e até (2) não caibam
+  inteiros em dias de cota mais apertada.
 - Categorias/itens revezam por dia (`categories_per_day` em
   `config/categories.yml`) em vez de rodar todos juntos — o
   `app/scraping/quota.py` calcula quantas buscas cabem hoje dividindo o

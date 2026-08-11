@@ -1,6 +1,6 @@
 import datetime as dt
 
-from app.db.models import Category, PriceHistory, SearchRun, User
+from app.db.models import Category, Coupon, PriceHistory, SearchRun, User
 from app.scraping.firecrawl_client import SearchResult
 from app.scraping.ingest import ingest_result, normalize_url, url_hash
 
@@ -98,3 +98,54 @@ def test_ingest_skips_when_no_price_found(db_session):
 
     assert outcome.price_recorded is False
     assert outcome.price is None
+
+
+def test_ingest_records_coupon_found_in_markdown(db_session):
+    user, category, run = _setup_user_category_run(db_session)
+    result = SearchResult(
+        url="https://loja-exemplo.com.br/porcelanato-80x80",
+        title="Porcelanato 80x80",
+        markdown="Preço: R$ 89,90/m². Use o cupom PROMO10 e ganhe 10% off!",
+    )
+
+    outcome = ingest_result(db_session, user, category, run, result)
+
+    assert outcome.coupon_code == "PROMO10"
+    coupons = db_session.query(Coupon).filter_by(product_id=outcome.product.id).all()
+    assert len(coupons) == 1
+    assert coupons[0].code == "PROMO10"
+    assert coupons[0].store_domain == "loja-exemplo.com.br"
+
+
+def test_ingest_does_not_duplicate_same_coupon_seen_again(db_session):
+    user, category, run1 = _setup_user_category_run(db_session)
+    result = SearchResult(
+        url="https://loja-exemplo.com.br/produto",
+        markdown="R$ 50,00 — cupom PROMO10",
+    )
+    ingest_result(db_session, user, category, run1, result)
+
+    run2 = SearchRun(
+        user_id=user.id,
+        category_id=category.id,
+        query="porcelanato oferta",
+        ran_at=dt.datetime(2026, 8, 11, 12, 0, 0),
+    )
+    db_session.add(run2)
+    db_session.commit()
+
+    outcome2 = ingest_result(db_session, user, category, run2, result)
+
+    assert outcome2.coupon_code == "PROMO10"  # ainda reporta, mas não duplica no banco
+    coupons = db_session.query(Coupon).filter_by(product_id=outcome2.product.id).all()
+    assert len(coupons) == 1
+
+
+def test_ingest_returns_none_coupon_when_none_found(db_session):
+    user, category, run = _setup_user_category_run(db_session)
+    result = SearchResult(url="https://loja-exemplo.com.br/produto", markdown="R$ 50,00")
+
+    outcome = ingest_result(db_session, user, category, run, result)
+
+    assert outcome.coupon_code is None
+    assert db_session.query(Coupon).count() == 0

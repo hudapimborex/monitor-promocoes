@@ -11,7 +11,7 @@ import io
 
 from sqlalchemy.orm import Session
 
-from app.db.models import PriceAlert, PriceHistory, Product
+from app.db.models import Coupon, PriceAlert, PriceHistory, Product
 
 
 def export_history_csv(db: Session, user_id: int) -> str:
@@ -74,6 +74,30 @@ def export_alerts_csv(db: Session, user_id: int) -> str:
                 alert.notified_at.isoformat() if alert.notified_at else "",
                 alert.channel or "",
                 product.url,
+            ]
+        )
+    return buffer.getvalue()
+
+
+def export_coupons_csv(db: Session, user_id: int) -> str:
+    coupons = (
+        db.query(Coupon)
+        .filter(Coupon.user_id == user_id)
+        .order_by(Coupon.found_at.desc())
+        .all()
+    )
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["codigo", "produto", "loja", "contexto", "encontrado_em", "url"])
+    for coupon in coupons:
+        writer.writerow(
+            [
+                coupon.code,
+                coupon.product.name if coupon.product else "",
+                coupon.store_domain or "",
+                coupon.description or "",
+                coupon.found_at.isoformat(),
+                coupon.source_url,
             ]
         )
     return buffer.getvalue()

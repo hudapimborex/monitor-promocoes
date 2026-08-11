@@ -1,13 +1,14 @@
 import datetime as dt
 
-from app.db.models import Category, PriceAlert, PriceHistory, Product, User
+from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, User
 from app.web.dashboard_data import (
     dashboard_summary,
     get_product_history,
     list_products_with_prices,
     list_recent_alerts,
+    list_recent_coupons,
 )
-from app.web.export import export_alerts_csv, export_history_csv
+from app.web.export import export_alerts_csv, export_coupons_csv, export_history_csv
 
 
 def _seed(db_session):
@@ -51,6 +52,18 @@ def _seed(db_session):
     db_session.add(alert)
     db_session.commit()
 
+    coupon = Coupon(
+        user_id=user.id,
+        product_id=product.id,
+        store_domain="loja.com.br",
+        code="PROMO10",
+        description="Use o cupom PROMO10",
+        source_url="https://loja.com.br/produto",
+        found_at=dt.datetime(2026, 8, 10),
+    )
+    db_session.add(coupon)
+    db_session.commit()
+
     return user, product
 
 
@@ -86,6 +99,15 @@ def test_dashboard_summary_counts(db_session):
     summary = dashboard_summary(db_session, user.id)
     assert summary["products_count"] == 1
     assert summary["alerts_count_7d"] >= 0  # depende da data "agora" vs created_at fixo
+    assert summary["coupons_count"] == 1
+
+
+def test_list_recent_coupons(db_session):
+    user, product = _seed(db_session)
+    coupons = list_recent_coupons(db_session, user.id)
+    assert len(coupons) == 1
+    assert coupons[0].code == "PROMO10"
+    assert coupons[0].product_id == product.id
 
 
 def test_export_history_csv_contains_rows(db_session):
@@ -102,3 +124,11 @@ def test_export_alerts_csv_contains_rows(db_session):
     csv_text = export_alerts_csv(db_session, user.id)
     assert "queda_pct" in csv_text
     assert "30.0" in csv_text
+
+
+def test_export_coupons_csv_contains_rows(db_session):
+    user, _ = _seed(db_session)
+    csv_text = export_coupons_csv(db_session, user.id)
+    assert "codigo" in csv_text
+    assert "PROMO10" in csv_text
+    assert "Porcelanato 80x80" in csv_text
