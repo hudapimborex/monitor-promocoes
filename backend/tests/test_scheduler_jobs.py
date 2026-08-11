@@ -14,7 +14,11 @@ def setup_function():
 
 
 class StubFirecrawlClient:
-    """Substitui a Firecrawl real nos testes — devolve respostas pré-definidas."""
+    """Substitui a Firecrawl real nos testes — devolve respostas pré-definidas
+    pras queries que interessam ao teste. Qualquer outra query gerada pelo
+    query_builder (ex: as variações de marketplace) recebe uma resposta
+    vazia em vez de KeyError, pra não acoplar o teste ao número exato de
+    queries que uma categoria produz."""
 
     def __init__(self, responses: dict[str, SearchResponse]):
         self.responses = responses
@@ -22,7 +26,9 @@ class StubFirecrawlClient:
 
     def search(self, query: str, scrape_top_n: int = 3) -> SearchResponse:
         self.calls.append(query)
-        return self.responses[query]
+        if query in self.responses:
+            return self.responses[query]
+        return SearchResponse(query=query, results=[], credits_used=2.0)
 
 
 def _now() -> dt.datetime:
@@ -60,7 +66,8 @@ def test_run_search_for_user_records_price_without_alert_on_first_observation(db
 
     stats = run_search_for_user(db_session, user, client, notifier)
 
-    assert stats["queries"] == 1
+    assert query in client.calls
+    assert stats["queries"] >= 1
     assert stats["results"] == 1
     assert stats["prices_recorded"] == 1
     assert stats["alerts"] == 0  # primeira observação: sem baseline, não pode confirmar queda
@@ -71,9 +78,10 @@ def test_run_search_for_user_records_price_without_alert_on_first_observation(db
     assert db_session.query(PriceHistory).filter_by(product_id=products[0].id).count() == 1
 
     runs = db_session.query(SearchRun).filter_by(user_id=user.id).all()
-    assert len(runs) == 1
-    assert runs[0].status == "ok"
-    assert runs[0].credits_used == 3.0
+    assert len(runs) == stats["queries"]
+    assert all(r.status == "ok" for r in runs)
+    matching_run = next(r for r in runs if r.query == query)
+    assert matching_run.credits_used == 3.0
 
 
 def test_run_search_for_user_creates_and_sends_alert_on_real_drop(db_session, monkeypatch):
@@ -159,13 +167,13 @@ def test_run_search_for_user_marks_search_run_as_error_on_failure(db_session):
     notifier = TelegramNotifier(bot_token="", default_chat_id="")
     stats = run_search_for_user(db_session, user, FailingClient(), notifier)
 
-    assert stats["errors"] == 1
+    assert stats["errors"] >= 1
     assert stats["queries"] == 0
 
     runs = db_session.query(SearchRun).filter_by(user_id=user.id).all()
-    assert len(runs) == 1
-    assert runs[0].status == "error"
-    assert "simulated failure" in runs[0].error_message
+    assert len(runs) == stats["errors"]
+    assert all(r.status == "error" for r in runs)
+    assert all("simulated failure" in r.error_message for r in runs)
 
 
 def test_run_search_for_user_rejects_when_already_running(db_session):

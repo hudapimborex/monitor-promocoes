@@ -174,15 +174,24 @@ cd backend
 ### Orçamento de créditos Firecrawl
 
 Cada busca com raspagem dos top N resultados custa aprox. `2 + N` créditos.
-Com `FIRECRAWL_SCRAPE_TOP_N=3` (padrão) e orçamento de
+Com `FIRECRAWL_SCRAPE_TOP_N=2` (padrão) e orçamento de
 `FIRECRAWL_MONTHLY_CREDIT_BUDGET=900` (deixa margem sobre os 1.000 grátis):
 
-- ~30 buscas/dia cabem confortavelmente no orçamento.
-- Categorias revezam por dia (`categories_per_day` em `config/categories.yml`)
-  em vez de rodar todas juntas — o `app/scraping/quota.py` calcula quantas
-  buscas cabem hoje dividindo o orçamento restante pelos dias que faltam no
-  mês, reduzindo o rodízio automaticamente perto do fim do mês em vez de
-  estourar a cota.
+- ~37 buscas/dia cabem confortavelmente no orçamento (900 ÷ 30 dias ÷ 4 créditos/busca).
+- Cada item de busca (`/items`) gera algumas queries: termo genérico +
+  desconto, uma busca dedicada em cada marketplace prioritário
+  (`marketplace_priority_domains` — hoje Mercado Livre e Shopee, via
+  `site:dominio.com.br`) e, se configurado, variações de tamanho — nessa
+  ordem de prioridade, então o que sobra de orçamento sempre cobre o
+  genérico e os marketplaces antes das variações mais específicas.
+- Categorias/itens revezam por dia (`categories_per_day` em
+  `config/categories.yml`) em vez de rodar todos juntos — o
+  `app/scraping/quota.py` calcula quantas buscas cabem hoje dividindo o
+  orçamento restante pelos dias que faltam no mês, reduzindo o rodízio
+  automaticamente perto do fim do mês em vez de estourar a cota. Quanto
+  mais itens você cadastrar, menos frequente cada um é checado — dá pra
+  compensar aumentando `FIRECRAWL_MONTHLY_CREDIT_BUDGET`,
+  `categories_per_day`, ou reduzindo `FIRECRAWL_SCRAPE_TOP_N` ainda mais.
 - Para mais abrangência, o próximo degrau é o plano Hobby da Firecrawl
   ($16/mês, ~5.000 créditos) — não é necessário para o MVP.
 

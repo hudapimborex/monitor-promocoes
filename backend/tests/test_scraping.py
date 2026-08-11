@@ -34,6 +34,18 @@ def test_build_queries_prioritizes_generic_before_sized():
     assert len(queries) == len(set(queries))
 
 
+def test_build_queries_includes_priority_marketplaces_before_sized():
+    category = make_category()
+    queries = build_queries(category)
+
+    assert "site:mercadolivre.com.br porcelanato promoção" in queries
+    assert "site:shopee.com.br porcelanato promoção" in queries
+    # marketplaces vêm depois do genérico, mas antes das variações de tamanho
+    ml_index = queries.index("site:mercadolivre.com.br porcelanato promoção")
+    sized_index = queries.index("porcelanato 80x80 promoção")
+    assert ml_index < sized_index
+
+
 def test_build_queries_respects_max_queries():
     category = make_category()
     queries = build_queries(category, max_queries=1)
@@ -43,7 +55,9 @@ def test_build_queries_respects_max_queries():
 def test_build_queries_falls_back_to_category_name_when_no_terms():
     category = make_category(keywords_json={})
     queries = build_queries(category)
-    assert queries == ["Porcelanato promoção"]
+    assert queries[0] == "Porcelanato promoção"
+    assert "site:mercadolivre.com.br Porcelanato promoção" in queries
+    assert "site:shopee.com.br Porcelanato promoção" in queries
 
 
 def test_quota_tracks_usage_and_remaining_budget(db_session):

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # quiser mudar a região (ex: outra cidade/estado).
     firecrawl_search_country: str = "BR"
     firecrawl_search_location: str = "Rio de Janeiro, Rio de Janeiro, Brazil"
+    # Marketplaces que sempre entram com busca dedicada (site:) em todo item
+    # — garante cobertura mesmo quando a busca ampla não ranqueia eles bem
+    # pros nossos termos. Separados por vírgula; deixe vazio pra desativar.
+    marketplace_priority_domains: str = "mercadolivre.com.br,shopee.com.br"
 
     # Telegram
     telegram_bot_token: str = ""
