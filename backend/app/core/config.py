@@ -35,7 +35,10 @@ class Settings(BaseSettings):
     firecrawl_base_url: str = "https://api.firecrawl.dev/v1"
     # Orçamento mensal de créditos com margem sobre a cota grátis (1000/mês).
     firecrawl_monthly_credit_budget: int = 900
-    firecrawl_scrape_top_n: int = 3
+    # 2 em vez de 3: cada busca fica mais barata (2+2=4 créditos em vez de
+    # 2+3=5), cabem ~25% mais buscas por dia dentro do mesmo orçamento —
+    # troca um pouco de profundidade por página por mais cobertura de itens.
+    firecrawl_scrape_top_n: int = 2
     # Geo-bias dos resultados de busca (params "country"/"location" do
     # endpoint /search da Firecrawl) — prioriza lojas brasileiras/da região
     # sem restringir a busca a uma lista fixa de domínios. Ajuste no .env se

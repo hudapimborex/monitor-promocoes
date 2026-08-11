@@ -30,7 +30,7 @@ services:
       - key: FIRECRAWL_MONTHLY_CREDIT_BUDGET
         value: "900"
       - key: FIRECRAWL_SCRAPE_TOP_N
-        value: "3"
+        value: "2"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_DEFAULT_CHAT_ID
