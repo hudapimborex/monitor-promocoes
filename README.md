@@ -175,6 +175,15 @@ item direto pra ele (ex: `Fogão`) que ele já cria como novo item de busca e
 confirma de volta. Só funciona pra chat_ids já configurados em
 Configurações (qualquer outro é ignorado).
 
+- **Prioridade no rodízio**: coloque a prioridade depois de uma vírgula no
+  fim do nome — ex: `Fogão, 1` (1 = mais prioritário; sem isso, o padrão é
+  2). Ver `app/scraping/quota.py` pra como a prioridade afeta o rodízio.
+- **Ver o que já foi buscado**: mande `status <nome>` (ex: `status Fogão`)
+  que o bot responde com quantas buscas já rodaram, quantos produtos foram
+  achados, o preço mais recente registrado e quantos alertas/cupons já
+  saíram pra esse item — sem precisar abrir o painel.
+- Mande `ajuda` a qualquer momento pra ver esses comandos de novo.
+
 Pra ativar, entre em **Configurações** (`/settings`) no painel e clique em
 "Ativar / atualizar webhook do Telegram" (precisa ter salvo o Telegram Bot
 Token antes) — o próprio servidor registra a URL do webhook usando o token

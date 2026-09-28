@@ -1,7 +1,9 @@
+import datetime as dt
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db.models import Category, NotificationSettings, User
+from app.db.models import Category, NotificationSettings, PriceHistory, Product, SearchRun, User
 from app.db.session import get_db
 from app.notifications.telegram import TelegramNotifier
 from app.web.telegram_webhook import webhook_secret
@@ -116,3 +118,109 @@ def test_second_chat_id_in_comma_separated_list_is_also_authorized(client, db_se
 def test_malformed_payload_does_not_crash(client, db_session):
     resp = client.post(f"/telegram/webhook/{webhook_secret()}", json={"unexpected": "shape"})
     assert resp.status_code == 200
+
+
+def test_adding_item_with_priority_suffix(client, db_session, fake_telegram_send):
+    user = _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "Fogão, 1")
+    )
+    assert resp.status_code == 200
+
+    category = db_session.query(Category).filter_by(user_id=user.id).first()
+    assert category is not None
+    assert category.name == "Fogão"
+    assert category.priority == 1
+    assert "prioridade 1" in fake_telegram_send[0]["text"]
+
+
+def test_adding_item_without_priority_suffix_uses_default(client, db_session, fake_telegram_send):
+    user = _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "Fogão")
+    )
+    assert resp.status_code == 200
+
+    category = db_session.query(Category).filter_by(user_id=user.id).first()
+    assert category.priority == 2
+    assert "prioridade 2" in fake_telegram_send[0]["text"]
+
+
+def test_name_with_trailing_non_numeric_comma_is_kept_as_is(client, db_session, fake_telegram_send):
+    user = _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}",
+        json=_telegram_update("999888777", "Fogão, 5 bocas"),
+    )
+    assert resp.status_code == 200
+
+    category = db_session.query(Category).filter_by(user_id=user.id).first()
+    assert category.name == "Fogão, 5 bocas"
+    assert category.priority == 2
+
+
+def test_status_command_reports_search_activity(client, db_session, fake_telegram_send):
+    user = _seed_user_with_chat_id(db_session)
+    category = Category(user_id=user.id, slug="fogao", name="Fogão", active=True, priority=1)
+    db_session.add(category)
+    db_session.commit()
+
+    run = SearchRun(user_id=user.id, category_id=category.id, query="fogão promoção")
+    db_session.add(run)
+    db_session.commit()
+
+    product = Product(
+        user_id=user.id,
+        category_id=category.id,
+        name="Fogão 5 Bocas",
+        store_domain="loja.com",
+        url="https://loja.com/fogao",
+        url_hash="hash-status-1",
+    )
+    db_session.add(product)
+    db_session.commit()
+    db_session.add(
+        PriceHistory(product_id=product.id, price=899.0, captured_at=dt.datetime(2026, 9, 28, 14, 0))
+    )
+    db_session.commit()
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "status Fogão")
+    )
+    assert resp.status_code == 200
+
+    assert len(fake_telegram_send) == 1
+    text = fake_telegram_send[0]["text"]
+    assert "Fogão" in text
+    assert "1 busca" in text
+    assert "1 produto" in text
+    assert "899" in text
+    # não deve criar item novo nenhum
+    assert db_session.query(Category).filter_by(user_id=user.id).count() == 1
+
+
+def test_status_command_for_unknown_item_replies_not_found(client, db_session, fake_telegram_send):
+    _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "status Geladeira")
+    )
+    assert resp.status_code == 200
+    assert len(fake_telegram_send) == 1
+    assert "Geladeira" in fake_telegram_send[0]["text"]
+    assert db_session.query(Category).count() == 0
+
+
+def test_help_keyword_replies_with_instructions_and_creates_nothing(client, db_session, fake_telegram_send):
+    _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "ajuda")
+    )
+    assert resp.status_code == 200
+    assert len(fake_telegram_send) == 1
+    assert "status" in fake_telegram_send[0]["text"].lower()
+    assert db_session.query(Category).count() == 0

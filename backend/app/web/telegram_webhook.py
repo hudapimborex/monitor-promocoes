@@ -1,5 +1,7 @@
 """Webhook do Telegram: deixa adicionar item de busca mandando o nome dele
-direto pro bot, sem precisar abrir o painel.
+direto pro bot, sem precisar abrir o painel. Também aceita "status <nome>"
+pra consultar o que já foi buscado, e uma prioridade opcional no fim do
+nome (separada por vírgula) na hora de adicionar.
 
 Só aceita mensagem vinda de um chat_id que já está configurado em
 Configurações pra receber alertas — qualquer outra é ignorada (sem
@@ -26,10 +28,26 @@ from app.core.user_credentials import build_telegram_notifier
 from app.db.models import NotificationSettings, User, UserCredentials
 from app.db.session import get_db
 from app.notifications.service import split_chat_ids
-from app.scraping.item_management import create_item
+from app.scraping.item_management import (
+    build_status_message,
+    create_item,
+    find_category_by_name,
+    parse_name_and_priority,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+STATUS_KEYWORDS = ("status", "buscas", "busca")
+
+HELP_TEXT = (
+    "📋 Como usar:\n"
+    '• Manda o nome de um item (ex: "Fogão") pra adicionar — opcionalmente '
+    'com a prioridade no rodízio no fim, separada por vírgula (ex: "Fogão, '
+    '1"; 1 = mais prioritário). Sem isso, a prioridade padrão é 2.\n'
+    '• Manda "status <nome>" (ex: "status Fogão") pra ver quantas buscas já '
+    "rolaram e o que foi encontrado até agora."
+)
 
 
 def webhook_secret() -> str:
@@ -78,12 +96,28 @@ async def telegram_webhook(secret: str, request: Request, db: Session = Depends(
             logger.info("Telegram webhook: chat_id %s não autorizado, ignorando.", chat_id)
             return {"ok": True}
 
-        category = create_item(db, user, text)
+        notifier = build_telegram_notifier(db, user.id)
+
+        if text.strip().lower() in ("ajuda", "help", "?"):
+            notifier.send_message(HELP_TEXT, chat_id=chat_id)
+            return {"ok": True}
+
+        first_word, _, rest = text.partition(" ")
+        if first_word.lower() in STATUS_KEYWORDS and rest.strip():
+            category = find_category_by_name(db, user, rest.strip())
+            if category is None:
+                notifier.send_message(f'Não achei nenhum item chamado "{rest.strip()}".', chat_id=chat_id)
+            else:
+                notifier.send_message(build_status_message(db, category), chat_id=chat_id)
+            return {"ok": True}
+
+        name, priority = parse_name_and_priority(text)
+        category = create_item(db, user, name, priority=priority or 2)
         logger.info('Item "%s" criado via Telegram por chat_id %s.', category.name, chat_id)
 
-        notifier = build_telegram_notifier(db, user.id)
         notifier.send_message(
-            f'✅ Item adicionado: "{category.name}" — já entra no rodízio de buscas.',
+            f'✅ Item adicionado: "{category.name}" (prioridade {category.priority}) — '
+            "já entra no rodízio de buscas.",
             chat_id=chat_id,
         )
     except Exception:
