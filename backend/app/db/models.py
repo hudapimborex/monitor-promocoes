@@ -227,7 +227,8 @@ class NotificationSettings(Base):
     __tablename__ = "notification_settings"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Pode ter vários chat_ids separados por vírgula (ver app/notifications/service.py).
+    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     channels_enabled_json: Mapped[list] = mapped_column(
         JSON, default=lambda: ["telegram", "dashboard"]
     )
@@ -246,7 +247,8 @@ class UserCredentials(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     firecrawl_api_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     telegram_bot_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Pode ter vários chat_ids separados por vírgula (ver app/notifications/service.py).
+    telegram_chat_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship()

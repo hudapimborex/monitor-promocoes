@@ -21,6 +21,14 @@ from app.notifications.telegram import TelegramNotifier
 logger = logging.getLogger(__name__)
 
 
+def split_chat_ids(raw: Optional[str]) -> list[str]:
+    """Telegram Chat ID pode ter vários números separados por vírgula
+    (ex: "123456789, -100987654321") — cada avisos vai pra todos."""
+    if not raw:
+        return []
+    return [c.strip() for c in raw.split(",") if c.strip()]
+
+
 def format_alert_message(product: Product, alert: PriceAlert) -> str:
     return (
         "📉 <b>Queda de preço confirmada!</b>\n\n"
@@ -46,15 +54,26 @@ def notify_alert(
     notifier = notifier or TelegramNotifier()
 
     settings_row = db.query(NotificationSettings).filter_by(user_id=product.user_id).first()
-    chat_id = settings_row.telegram_chat_id if settings_row else None
+    chat_id_raw = (settings_row.telegram_chat_id if settings_row else None) or notifier.default_chat_id
     channels = settings_row.channels_enabled_json if settings_row else ["telegram", "dashboard"]
 
     if "telegram" not in (channels or []):
         logger.info("Canal telegram desativado para user_id=%s; alerta fica só no painel.", product.user_id)
         return False
 
+    chat_ids = split_chat_ids(chat_id_raw)
+    if not chat_ids:
+        logger.warning("Nenhum Telegram chat_id configurado para user_id=%s; alerta fica só no painel.", product.user_id)
+        return False
+
     message = format_alert_message(product, alert)
-    sent = notifier.send_message(message, chat_id=chat_id)
+    sent = False
+    for chat_id in chat_ids:
+        if notifier.send_message(message, chat_id=chat_id):
+            sent = True
+        else:
+            logger.error("Falha ao enviar alerta pro chat_id %s", chat_id)
+
     if sent:
         alert.notified_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
         alert.channel = "telegram"

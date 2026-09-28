@@ -4,13 +4,32 @@ import httpx
 
 from app.core.formatting import format_brl
 from app.db.models import Category, NotificationSettings, PriceAlert, Product, User
-from app.notifications.service import format_alert_message, notify_alert, notify_pending_alerts
+from app.notifications.service import (
+    format_alert_message,
+    notify_alert,
+    notify_pending_alerts,
+    split_chat_ids,
+)
 from app.notifications.telegram import TelegramNotifier
 
 
 def test_format_brl():
     assert format_brl(1234.5) == "R$ 1.234,50"
     assert format_brl(89.9) == "R$ 89,90"
+
+
+def test_split_chat_ids_handles_comma_separated_and_whitespace():
+    assert split_chat_ids("123456789, 987654321") == ["123456789", "987654321"]
+    assert split_chat_ids("  111 ,,222  ,") == ["111", "222"]
+
+
+def test_split_chat_ids_handles_empty_and_none():
+    assert split_chat_ids("") == []
+    assert split_chat_ids(None) == []
+
+
+def test_split_chat_ids_single_value():
+    assert split_chat_ids("999") == ["999"]
 
 
 def test_send_message_returns_false_when_not_configured():
@@ -117,6 +136,76 @@ def test_notify_alert_does_not_resend_already_notified(db_session, monkeypatch):
     )
 
     notifier = TelegramNotifier(bot_token="fake-token", default_chat_id="1")
+    sent = notify_alert(db_session, product, alert, notifier=notifier)
+
+    assert sent is False
+    assert calls == []
+
+
+def test_notify_alert_sends_to_multiple_chat_ids(db_session, monkeypatch):
+    user, product, alert = _make_product_and_alert(db_session)
+    db_session.add(NotificationSettings(user_id=user.id, telegram_chat_id="111, 222"))
+    db_session.commit()
+
+    sent_to = []
+
+    def fake_post(self, url, json=None, **kwargs):
+        sent_to.append(json["chat_id"])
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    notifier = TelegramNotifier(bot_token="fake-token")
+    sent = notify_alert(db_session, product, alert, notifier=notifier)
+
+    assert sent is True
+    assert sorted(sent_to) == ["111", "222"]
+    assert alert.notified_at is not None
+
+
+def test_notify_alert_still_marks_sent_if_only_one_of_several_succeeds(db_session, monkeypatch):
+    user, product, alert = _make_product_and_alert(db_session)
+    db_session.add(NotificationSettings(user_id=user.id, telegram_chat_id="111, 222"))
+    db_session.commit()
+
+    def fake_post(self, url, json=None, **kwargs):
+        if json["chat_id"] == "111":
+            return httpx.Response(400, text="bad", request=httpx.Request("POST", url))
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    notifier = TelegramNotifier(bot_token="fake-token")
+    sent = notify_alert(db_session, product, alert, notifier=notifier)
+
+    assert sent is True  # pelo menos um dos dois recebeu
+
+
+def test_notify_alert_falls_back_to_notifier_default_chat_id_without_settings_row(db_session, monkeypatch):
+    _, product, alert = _make_product_and_alert(db_session)
+    # sem NotificationSettings cadastrada pra esse usuário
+
+    def fake_post(self, url, json=None, **kwargs):
+        assert json["chat_id"] == "555"
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    notifier = TelegramNotifier(bot_token="fake-token", default_chat_id="555")
+    sent = notify_alert(db_session, product, alert, notifier=notifier)
+
+    assert sent is True
+
+
+def test_notify_alert_returns_false_without_any_chat_id(db_session, monkeypatch):
+    _, product, alert = _make_product_and_alert(db_session)
+
+    calls = []
+    monkeypatch.setattr(
+        httpx.Client, "post", lambda self, url, json=None, **kwargs: calls.append(1)
+    )
+
+    notifier = TelegramNotifier(bot_token="fake-token", default_chat_id="")
     sent = notify_alert(db_session, product, alert, notifier=notifier)
 
     assert sent is False
