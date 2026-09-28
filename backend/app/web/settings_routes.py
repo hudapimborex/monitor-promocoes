@@ -11,6 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import logging
+
+import httpx
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -18,9 +21,13 @@ from sqlalchemy.orm import Session
 
 from app.core.formatting import mask_secret
 from app.core.security import hash_password, verify_password
+from app.core.user_credentials import build_telegram_notifier
 from app.db.models import User, UserCredentials
 from app.db.session import get_db
 from app.web.auth_web import get_current_web_user
+from app.web.telegram_webhook import webhook_secret
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
@@ -100,3 +107,40 @@ def change_password(
     user.hashed_password = hash_password(new_password)
     db.commit()
     return RedirectResponse(url="/settings?saved=password", status_code=303)
+
+
+@router.post("/settings/telegram-webhook")
+def register_telegram_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_web_user),
+):
+    """Registra a URL do webhook do Telegram (setWebhook) usando o token já
+    salvo em Configurações — assim quem clica no botão nunca precisa colar
+    token nenhum em lugar nenhum, o servidor usa a própria credencial que já
+    tem guardada."""
+    notifier = build_telegram_notifier(db, user.id)
+    if not notifier.is_configured:
+        return RedirectResponse(url="/settings?error=telegram_nao_configurado", status_code=303)
+
+    base_url = str(request.base_url).rstrip("/")
+    if base_url.startswith("http://"):
+        base_url = "https://" + base_url[len("http://") :]
+    webhook_url = f"{base_url}/telegram/webhook/{webhook_secret()}"
+
+    try:
+        resp = httpx.post(
+            f"https://api.telegram.org/bot{notifier.bot_token}/setWebhook",
+            json={"url": webhook_url},
+            timeout=15,
+        )
+        data = resp.json()
+    except httpx.HTTPError:
+        logger.exception("Erro ao registrar webhook do Telegram")
+        return RedirectResponse(url="/settings?error=telegram_webhook_falhou", status_code=303)
+
+    if not data.get("ok"):
+        logger.error("Telegram setWebhook recusou: %s", data)
+        return RedirectResponse(url="/settings?error=telegram_webhook_falhou", status_code=303)
+
+    return RedirectResponse(url="/settings?saved=webhook", status_code=303)

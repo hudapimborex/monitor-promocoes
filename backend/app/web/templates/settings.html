@@ -5,9 +5,12 @@
 
 {% if saved == "credentials" %}<div class="flash ok">Credenciais salvas.</div>{% endif %}
 {% if saved == "password" %}<div class="flash ok">Senha alterada.</div>{% endif %}
+{% if saved == "webhook" %}<div class="flash ok">Webhook do Telegram registrado — pode mandar o nome de um item pro bot que ele já entra na lista de busca.</div>{% endif %}
 {% if error == "senha_atual_incorreta" %}<div class="flash err">Senha atual incorreta.</div>{% endif %}
 {% if error == "senha_muito_curta" %}<div class="flash err">A nova senha precisa ter pelo menos 8 caracteres.</div>{% endif %}
 {% if error == "senhas_nao_conferem" %}<div class="flash err">As senhas não conferem.</div>{% endif %}
+{% if error == "telegram_nao_configurado" %}<div class="flash err">Salve o Telegram Bot Token antes de registrar o webhook.</div>{% endif %}
+{% if error == "telegram_webhook_falhou" %}<div class="flash err">Não consegui registrar o webhook no Telegram — confira se o token está correto e tente de novo.</div>{% endif %}
 
 <h2>Integrações</h2>
 <form method="post" action="/settings/credentials" class="form-card">
@@ -23,6 +26,18 @@
   <input type="text" id="telegram_chat_id" name="telegram_chat_id" value="{{ telegram_chat_id }}" placeholder="ex: 123456789, 987654321">
 
   <button type="submit" class="btn">Salvar credenciais</button>
+</form>
+
+<h2>Adicionar item mandando mensagem pro bot</h2>
+<p class="hint">
+  Depois de salvar o Telegram Bot Token acima, clique aqui uma vez pra ativar:
+  qualquer chat_id configurado (o seu e os que você colocar, separados por
+  vírgula lá em cima) pode mandar o nome de um item direto pro bot que ele já
+  entra no rodízio de busca — sem abrir o painel. Só funciona nesse deploy na
+  nuvem, não no app local.
+</p>
+<form method="post" action="/settings/telegram-webhook" class="form-card">
+  <button type="submit" class="btn">Ativar / atualizar webhook do Telegram</button>
 </form>
 
 <h2>Trocar senha</h2>

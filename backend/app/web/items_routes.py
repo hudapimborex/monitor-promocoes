@@ -16,9 +16,14 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, SearchRun, User
+from app.db.models import Category, User
 from app.db.session import get_db
-from app.scraping.item_management import DEFAULT_DISCOUNT_TERMS, create_item as create_item_row
+from app.scraping.item_management import (
+    DEFAULT_DISCOUNT_TERMS,
+    create_item as create_item_row,
+    delete_all_items_cascade,
+    delete_item_cascade,
+)
 from app.web.auth_web import get_current_web_user
 
 router = APIRouter()
@@ -117,21 +122,18 @@ def delete_item(
         # desatualizada), trata como sucesso em vez de mostrar erro cru.
         return RedirectResponse(url="/items?deleted=1", status_code=303)
 
-    product_ids = [
-        pid for (pid,) in db.query(Product.id).filter(Product.category_id == category.id).all()
-    ]
-
-    if product_ids:
-        db.query(PriceAlert).filter(PriceAlert.product_id.in_(product_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(Coupon).filter(Coupon.product_id.in_(product_ids)).delete(synchronize_session=False)
-        db.query(PriceHistory).filter(PriceHistory.product_id.in_(product_ids)).delete(
-            synchronize_session=False
-        )
-        db.query(Product).filter(Product.category_id == category.id).delete(synchronize_session=False)
-
-    db.query(SearchRun).filter(SearchRun.category_id == category.id).delete(synchronize_session=False)
-    db.delete(category)
+    delete_item_cascade(db, category)
     db.commit()
     return RedirectResponse(url="/items?deleted=1", status_code=303)
+
+
+@router.post("/items/delete-all")
+def delete_all_items(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_web_user),
+):
+    """Apaga todos os itens de busca de uma vez (com todo o histórico
+    ligado a eles) — útil pra zerar a lista e recomeçar só com itens
+    adicionados pelo Telegram."""
+    delete_all_items_cascade(db, user)
+    return RedirectResponse(url="/items?deleted=all", status_code=303)

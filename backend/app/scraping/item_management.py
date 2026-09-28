@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.formatting import slugify
-from app.db.models import Category, User
+from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, SearchRun, User
 
 DEFAULT_DISCOUNT_TERMS = "promoção, desconto, oferta"
 
@@ -57,3 +57,29 @@ def create_item(
     db.commit()
     db.refresh(category)
     return category
+
+
+def delete_item_cascade(db: Session, category: Category) -> None:
+    """Apaga o item de vez — incluindo todo histórico de preço, alertas e
+    cupons ligados aos produtos encontrados nele. Irreversível; não faz
+    commit sozinho quando chamado em lote (ver delete_all_items_cascade)."""
+    product_ids = [pid for (pid,) in db.query(Product.id).filter(Product.category_id == category.id).all()]
+
+    if product_ids:
+        db.query(PriceAlert).filter(PriceAlert.product_id.in_(product_ids)).delete(synchronize_session=False)
+        db.query(Coupon).filter(Coupon.product_id.in_(product_ids)).delete(synchronize_session=False)
+        db.query(PriceHistory).filter(PriceHistory.product_id.in_(product_ids)).delete(synchronize_session=False)
+        db.query(Product).filter(Product.category_id == category.id).delete(synchronize_session=False)
+
+    db.query(SearchRun).filter(SearchRun.category_id == category.id).delete(synchronize_session=False)
+    db.delete(category)
+
+
+def delete_all_items_cascade(db: Session, user: User) -> int:
+    """Apaga todos os itens de busca do usuário de uma vez (mesmo cascade do
+    delete_item_cascade). Retorna quantos itens foram apagados."""
+    categories = db.query(Category).filter(Category.user_id == user.id).all()
+    for category in categories:
+        delete_item_cascade(db, category)
+    db.commit()
+    return len(categories)

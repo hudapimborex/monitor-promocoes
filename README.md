@@ -169,10 +169,16 @@ cd backend
 Além de receber alertas, o bot também aceita comando: mande o nome de um
 item direto pra ele (ex: `Fogão`) que ele já cria como novo item de busca e
 confirma de volta. Só funciona pra chat_ids já configurados em
-Configurações (qualquer outro é ignorado). Precisa do webhook registrado
-uma vez — `python scripts/register_telegram_webhook.py` — e só funciona no
-deploy na nuvem (o `.exe` local roda em `127.0.0.1`, sem endereço público
-que o Telegram consiga chamar).
+Configurações (qualquer outro é ignorado).
+
+Pra ativar, entre em **Configurações** (`/settings`) no painel e clique em
+"Ativar / atualizar webhook do Telegram" (precisa ter salvo o Telegram Bot
+Token antes) — o próprio servidor registra a URL do webhook usando o token
+já salvo, sem precisar rodar nada por fora. Só funciona no deploy na nuvem
+(o `.exe` local roda em `127.0.0.1`, sem endereço público que o Telegram
+consiga chamar). Alternativa por linha de comando, se preferir:
+`python scripts/register_telegram_webhook.py` (precisa de `TELEGRAM_BOT_TOKEN`
+e `JWT_SECRET` iguais aos de produção no `.env` local).
 
 ## Custos
 

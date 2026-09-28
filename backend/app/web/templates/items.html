@@ -9,7 +9,8 @@
 </p>
 
 {% if added %}<div class="flash ok">Item adicionado.</div>{% endif %}
-{% if deleted %}<div class="flash ok">Item removido (junto com todo o histórico de preço, alertas e cupons dele).</div>{% endif %}
+{% if deleted == "all" %}<div class="flash ok">Todos os itens foram removidos (junto com todo o histórico, alertas e cupons deles).</div>{% endif %}
+{% if deleted and deleted != "all" %}<div class="flash ok">Item removido (junto com todo o histórico de preço, alertas e cupons dele).</div>{% endif %}
 {% if error == "nome_vazio" %}<div class="flash err">Digite um nome pro item.</div>{% endif %}
 {% if error == "item_nao_encontrado" %}<div class="flash err">Esse item já não existe mais (provavelmente já foi apagado antes) — a lista abaixo está atualizada.</div>{% endif %}
 
@@ -32,6 +33,10 @@
 
 <h2>Seus itens</h2>
 {% if items %}
+<form method="post" action="/items/delete-all"
+      onsubmit="return confirm('Apagar TODOS os itens de busca ({{ items|length }} no total)? Isso apaga também todo o histórico, alertas e cupons deles. Não dá pra desfazer.');">
+  <button type="submit" class="btn" style="background:var(--danger); color:#fff; margin-bottom:10px;">Apagar todos os itens</button>
+</form>
 <table>
   <tr><th>Nome</th><th>Termos de desconto</th><th>Tamanhos</th><th>Prioridade</th><th>Status</th><th></th></tr>
   {% for i in items %}

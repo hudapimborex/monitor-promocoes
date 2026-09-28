@@ -264,3 +264,46 @@ def test_list_items_always_renders_delete_form(client, db_session):
     assert "Usado" in resp.text
     assert resp.text.count(f"/items/{fresh.id}/delete") == 1
     assert resp.text.count(f"/items/{with_history.id}/delete") == 1
+
+
+def test_delete_all_items_removes_everything_for_the_user(client, db_session):
+    user = _seed_and_login(client, db_session)
+    other = User(email="outro@example.com", hashed_password=hash_password("x"))
+    db_session.add(other)
+    db_session.commit()
+
+    cat_a = Category(user_id=user.id, slug="fogao", name="Fogão", active=True)
+    cat_b = Category(user_id=user.id, slug="cooktop", name="Cooktop", active=True)
+    other_cat = Category(user_id=other.id, slug="alheio", name="Alheio", active=True)
+    db_session.add_all([cat_a, cat_b, other_cat])
+    db_session.commit()
+
+    product = Product(
+        user_id=user.id,
+        category_id=cat_a.id,
+        name="Produto",
+        store_domain="loja.com",
+        url="https://loja.com/y",
+        url_hash="hash-items-delete-all",
+    )
+    db_session.add(product)
+    db_session.commit()
+    db_session.add(PriceHistory(product_id=product.id, price=10.0))
+    db_session.commit()
+
+    other_cat_id = other_cat.id
+
+    resp = client.post("/items/delete-all")
+    assert resp.headers["location"] == "/items?deleted=all"
+
+    assert db_session.query(Category).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(Product).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(PriceHistory).count() == 0
+    # não mexe nos itens de outro usuário
+    assert db_session.query(Category).filter_by(id=other_cat_id).first() is not None
+
+
+def test_delete_all_items_with_no_items_is_a_no_op(client, db_session):
+    _seed_and_login(client, db_session)
+    resp = client.post("/items/delete-all")
+    assert resp.headers["location"] == "/items?deleted=all"
