@@ -177,8 +177,10 @@ Configurações (qualquer outro é ignorado).
 
 - **Checagem imediata**: todo item novo já dispara uma busca de verdade na
   hora (algumas queries, limitadas pra não estourar o orçamento mensal de
-  créditos) — o bot manda um resumo assim que termina, sem esperar o
-  rodízio diário. Pra forçar isso de novo num item que já existe, manda
+  créditos) — sem esperar o rodízio diário nem precisar clicar em "Rodar
+  análise agora" no painel. O resumo que o bot manda de volta já vem com os
+  **preços e lojas encontrados** e os **códigos de cupom** achados, não só a
+  contagem. Pra forçar isso de novo num item que já existe, manda
   `buscar <nome>` (ex: `buscar Fogão`).
 - **Prioridade no rodízio**: coloque a prioridade depois de uma vírgula no
   fim do nome — ex: `Fogão, 1` (1 = mais prioritário; sem isso, o padrão é

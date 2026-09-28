@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from html import escape
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -29,6 +30,16 @@ from app.scraping.query_builder import build_queries
 from app.scraping.quota import record_credits, remaining_budget
 
 logger = logging.getLogger(__name__)
+
+MAX_DETAIL_LINES = 15
+
+
+def _join_capped(lines: list[str]) -> str:
+    """Evita estourar o limite de tamanho de mensagem do Telegram quando uma
+    checagem imediata acha muita coisa de uma vez."""
+    if len(lines) > MAX_DETAIL_LINES:
+        return "\n".join(lines[:MAX_DETAIL_LINES]) + f"\n… e mais {len(lines) - MAX_DETAIL_LINES}."
+    return "\n".join(lines)
 
 
 def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotifier) -> dict:
@@ -228,6 +239,9 @@ def run_immediate_check(
             client = build_firecrawl_client(db, user_id)
         queries = build_queries(category, max_queries=max_queries)
 
+        price_lines: list[str] = []
+        coupon_lines: list[str] = []
+
         for query in queries:
             search_run = SearchRun(user_id=user_id, category_id=category.id, query=query)
             db.add(search_run)
@@ -255,12 +269,21 @@ def run_immediate_check(
                 if outcome is None:
                     continue
 
+                product_name = escape(outcome.product.name)
+                store_domain = escape(outcome.product.store_domain)
+
                 if outcome.coupon_code:
                     stats["coupons_found"] += 1
+                    coupon_lines.append(
+                        f"🎟️ {escape(outcome.coupon_code)} — {product_name} ({store_domain})"
+                    )
 
                 if not outcome.price_recorded:
                     continue
                 stats["prices_recorded"] += 1
+                price_lines.append(
+                    f"• {product_name} — {store_domain}: {format_brl(outcome.price)}\n  {outcome.product.url}"
+                )
 
                 alert = check_product_for_drop(db, outcome.product)
                 if alert is None:
@@ -268,21 +291,27 @@ def run_immediate_check(
                 stats["alerts"] += 1
                 notify_alert(db, outcome.product, alert, notifier=notifier)
 
+        category_name = escape(category.name)
         if stats["queries"] == 0:
-            summary = f'🔍 Não consegui rodar nenhuma busca pra "{category.name}" agora — tenta de novo mais tarde.'
+            summary = f'🔍 Não consegui rodar nenhuma busca pra "{category_name}" agora — tenta de novo mais tarde.'
         else:
             summary = (
-                f'🔍 Busca inicial de "{category.name}" concluída: {stats["queries"]} busca(s), '
+                f'🔍 Busca inicial de "{category_name}" concluída: {stats["queries"]} busca(s), '
                 f'{stats["results"]} resultado(s), {stats["prices_recorded"]} preço(s) registrado(s).'
             )
             if stats["alerts"]:
                 summary += f' 📉 {stats["alerts"]} queda de preço já confirmada (avisei acima)!'
             elif stats["prices_recorded"]:
                 summary += " Ainda sem histórico suficiente pra confirmar queda — vou continuar de olho."
-            if stats["coupons_found"]:
-                summary += f' 🎟️ {stats["coupons_found"]} cupom(ns) encontrado(s).'
             if stats["errors"]:
                 summary += f' ⚠️ {stats["errors"]} busca(s) falharam.'
+
+            if price_lines:
+                summary += "\n\n💰 Preços encontrados:\n" + _join_capped(price_lines)
+            if coupon_lines:
+                summary += "\n\n🎟️ Cupons encontrados:\n" + _join_capped(coupon_lines)
+            if not price_lines and not coupon_lines:
+                summary += "\n\nNenhum preço ou cupom identificável nos resultados dessa vez."
 
         notify_status(db, user_id, summary, notifier=notifier)
         return stats

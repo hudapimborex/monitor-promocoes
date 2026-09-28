@@ -283,6 +283,46 @@ def _current_year_month() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).strftime("%Y-%m")
 
 
+def test_run_immediate_check_lists_coupons_found_in_summary(db_session, monkeypatch):
+    user = User(email="immediate-coupon@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+
+    category = Category(
+        user_id=user.id,
+        slug="fogao",
+        name="Fogão",
+        priority=1,
+        keywords_json={"base_terms": ["fogão"], "discount_terms": ["promoção"], "sizes": []},
+    )
+    db_session.add(category)
+    db_session.commit()
+
+    response = SearchResponse(
+        query="fogão promoção",
+        results=[
+            SearchResult(
+                url="https://loja.com.br/fogao",
+                title="Fogão 5 Bocas",
+                markdown="Preço: R$ 899,00. Use o cupom PROMO10 e ganhe 10% off!",
+            )
+        ],
+        credits_used=4.0,
+    )
+    client = StubFirecrawlClient({"fogão promoção": response})
+
+    notifier = TelegramNotifier(bot_token="fake", default_chat_id="1")
+    sent = []
+    monkeypatch.setattr(notifier, "send_message", lambda text, chat_id=None: sent.append(text) or True)
+
+    stats = run_immediate_check(user.id, category.id, db=db_session, client=client, notifier=notifier)
+
+    assert stats["coupons_found"] == 1
+    summary_message = next(m for m in sent if "Busca inicial" in m)
+    assert "PROMO10" in summary_message
+    assert "Fogão 5 Bocas" in summary_message
+
+
 def test_run_immediate_check_records_results_and_sends_summary(db_session, monkeypatch):
     user = User(email="immediate@example.com", hashed_password="x")
     db_session.add(user)
@@ -314,6 +354,12 @@ def test_run_immediate_check_records_results_and_sends_summary(db_session, monke
     assert stats["queries"] >= 1
     assert stats["prices_recorded"] == 1
     assert any("Busca inicial" in m and "Fogão" in m for m in sent)
+    # mostra o preço e a loja encontrados, não só a contagem
+    summary_message = next(m for m in sent if "Busca inicial" in m)
+    assert "Fogão 5 Bocas" in summary_message
+    assert "loja.com.br" in summary_message
+    assert "899" in summary_message
+    assert "https://loja.com.br/fogao" in summary_message
 
     runs = db_session.query(SearchRun).filter_by(category_id=category.id).all()
     assert len(runs) == stats["queries"]
