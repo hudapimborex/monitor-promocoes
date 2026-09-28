@@ -9,9 +9,8 @@
 </p>
 
 {% if added %}<div class="flash ok">Item adicionado.</div>{% endif %}
-{% if deleted %}<div class="flash ok">Item removido.</div>{% endif %}
+{% if deleted %}<div class="flash ok">Item removido (junto com todo o histórico de preço, alertas e cupons dele).</div>{% endif %}
 {% if error == "nome_vazio" %}<div class="flash err">Digite um nome pro item.</div>{% endif %}
-{% if error == "tem_historico" %}<div class="flash err">Esse item já tem histórico de preços — não pode ser excluído, então foi só desativado (não entra mais nas buscas).</div>{% endif %}
 
 <h2>Adicionar item</h2>
 <form method="post" action="/items" class="form-card">
@@ -47,11 +46,10 @@
           {% if i.active %}Pausar{% else %}Reativar{% endif %}
         </button>
       </form>
-      {% if i.can_delete %}
-      <form method="post" action="/items/{{ i.id }}/delete" style="display:inline;">
+      <form method="post" action="/items/{{ i.id }}/delete" style="display:inline;"
+            onsubmit="return confirm('Excluir \'{{ i.name }}\' de vez? Isso apaga também todo o histórico de preço, alertas e cupons já achados pra esse item. Não dá pra desfazer.');">
         <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; background:var(--danger); color:#fff;">Excluir</button>
       </form>
-      {% endif %}
     </td>
   </tr>
   {% endfor %}

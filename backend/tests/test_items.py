@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.core.formatting import slugify
 from app.core.security import hash_password
-from app.db.models import Category, PriceHistory, Product, SearchRun, User
+from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, SearchRun, User
 from app.db.session import get_db
 from main import app
 
@@ -118,25 +118,79 @@ def test_delete_item_without_history_removes_it(client, db_session):
     assert db_session.query(Category).filter_by(id=category_id).first() is None
 
 
-def test_delete_item_with_history_deactivates_instead_of_deleting(client, db_session):
+def test_delete_item_with_only_search_run_history_cascades(client, db_session):
     user = _seed_and_login(client, db_session)
     category = Category(user_id=user.id, slug="dobradica", name="Dobradiça", active=True)
     db_session.add(category)
     db_session.commit()
 
-    db_session.add(
-        SearchRun(user_id=user.id, category_id=category.id, query="dobradiça promoção")
-    )
+    db_session.add(SearchRun(user_id=user.id, category_id=category.id, query="dobradiça promoção"))
+    db_session.commit()
+    category_id = category.id
+
+    resp = client.post(f"/items/{category_id}/delete")
+    assert resp.headers["location"] == "/items?deleted=1"
+
+    assert db_session.query(Category).filter_by(id=category_id).first() is None
+    assert db_session.query(SearchRun).filter_by(category_id=category_id).count() == 0
+
+
+def test_delete_item_cascades_products_prices_alerts_and_coupons(client, db_session):
+    user = _seed_and_login(client, db_session)
+    category = Category(user_id=user.id, slug="usado", name="Usado", active=True)
+    db_session.add(category)
     db_session.commit()
 
-    resp = client.post(f"/items/{category.id}/delete")
-    assert resp.headers["location"] == "/items?error=tem_historico"
+    run = SearchRun(user_id=user.id, category_id=category.id, query="usado promoção")
+    db_session.add(run)
+    db_session.commit()
 
-    db_session.refresh(category)
-    assert category.active is False  # não foi excluída, só desativada
+    product = Product(
+        user_id=user.id,
+        category_id=category.id,
+        name="Produto",
+        store_domain="loja.com",
+        url="https://loja.com/x",
+        url_hash="hash-items-1",
+    )
+    db_session.add(product)
+    db_session.commit()
+
+    history = PriceHistory(product_id=product.id, price=10.0, source_search_run_id=run.id)
+    db_session.add(history)
+    db_session.commit()
+
+    alert = PriceAlert(
+        product_id=product.id,
+        user_id=user.id,
+        old_price=20.0,
+        new_price=10.0,
+        drop_pct=50.0,
+        source_price_history_id=history.id,
+    )
+    coupon = Coupon(
+        user_id=user.id,
+        product_id=product.id,
+        code="TESTE10",
+        source_url="https://loja.com/x",
+    )
+    db_session.add_all([alert, coupon])
+    db_session.commit()
+
+    category_id, product_id = category.id, product.id
+
+    resp = client.post(f"/items/{category_id}/delete")
+    assert resp.headers["location"] == "/items?deleted=1"
+
+    assert db_session.query(Category).filter_by(id=category_id).first() is None
+    assert db_session.query(Product).filter_by(id=product_id).first() is None
+    assert db_session.query(PriceHistory).filter_by(product_id=product_id).count() == 0
+    assert db_session.query(PriceAlert).filter_by(product_id=product_id).count() == 0
+    assert db_session.query(Coupon).filter_by(product_id=product_id).count() == 0
+    assert db_session.query(SearchRun).filter_by(category_id=category_id).count() == 0
 
 
-def test_list_items_shows_can_delete_flag(client, db_session):
+def test_list_items_always_renders_delete_form(client, db_session):
     user = _seed_and_login(client, db_session)
     fresh = Category(user_id=user.id, slug="fresh", name="Fresh", active=True)
     with_history = Category(user_id=user.id, slug="usado", name="Usado", active=True)
@@ -160,3 +214,5 @@ def test_list_items_shows_can_delete_flag(client, db_session):
     assert resp.status_code == 200
     assert "Fresh" in resp.text
     assert "Usado" in resp.text
+    assert resp.text.count(f"/items/{fresh.id}/delete") == 1
+    assert resp.text.count(f"/items/{with_history.id}/delete") == 1

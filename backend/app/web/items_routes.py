@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.core.formatting import slugify
-from app.db.models import Category, Product, SearchRun, User
+from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, SearchRun, User
 from app.db.session import get_db
 from app.web.auth_web import get_current_web_user
 
@@ -59,10 +59,6 @@ def list_items(
     rows = []
     for c in items:
         kw = c.keywords_json or {}
-        has_history = (
-            db.query(Product.id).filter(Product.category_id == c.id).first() is not None
-            or db.query(SearchRun.id).filter(SearchRun.category_id == c.id).first() is not None
-        )
         rows.append(
             {
                 "id": c.id,
@@ -72,7 +68,6 @@ def list_items(
                 "base_terms": ", ".join(kw.get("base_terms", [])),
                 "discount_terms": ", ".join(kw.get("discount_terms", [])),
                 "sizes": ", ".join(kw.get("sizes", [])),
-                "can_delete": not has_history,
             }
         )
     return templates.TemplateResponse(
@@ -139,21 +134,29 @@ def delete_item(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_web_user),
 ):
+    """Apaga o item de vez — incluindo todo histórico de preço, alertas e
+    cupons ligados aos produtos encontrados nele. Irreversível (por isso o
+    botão no painel pede confirmação antes de chamar essa rota).
+    """
     category = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if category is None:
         raise HTTPException(status_code=404, detail="Item não encontrado")
 
-    has_history = (
-        db.query(Product.id).filter(Product.category_id == category.id).first() is not None
-        or db.query(SearchRun.id).filter(SearchRun.category_id == category.id).first() is not None
-    )
-    if has_history:
-        # Não apaga pra não quebrar produtos/histórico já ligados a essa
-        # categoria — só desativa, o que já tira do rodízio de buscas.
-        category.active = False
-        db.commit()
-        return RedirectResponse(url="/items?error=tem_historico", status_code=303)
+    product_ids = [
+        pid for (pid,) in db.query(Product.id).filter(Product.category_id == category.id).all()
+    ]
 
+    if product_ids:
+        db.query(PriceAlert).filter(PriceAlert.product_id.in_(product_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Coupon).filter(Coupon.product_id.in_(product_ids)).delete(synchronize_session=False)
+        db.query(PriceHistory).filter(PriceHistory.product_id.in_(product_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(Product).filter(Product.category_id == category.id).delete(synchronize_session=False)
+
+    db.query(SearchRun).filter(SearchRun.category_id == category.id).delete(synchronize_session=False)
     db.delete(category)
     db.commit()
     return RedirectResponse(url="/items?deleted=1", status_code=303)
