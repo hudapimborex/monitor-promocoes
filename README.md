@@ -182,6 +182,9 @@ Configurações (qualquer outro é ignorado).
   que o bot responde com quantas buscas já rodaram, quantos produtos foram
   achados, o preço mais recente registrado e quantos alertas/cupons já
   saíram pra esse item — sem precisar abrir o painel.
+- **Ver todos os itens monitorados**: mande `itens` que o bot lista todos,
+  com status (✅ ativo / ⏸ pausado) e prioridade — é a lista atual do banco
+  na hora, não fica desatualizada.
 - Mande `ajuda` a qualquer momento pra ver esses comandos de novo.
 
 Pra ativar, entre em **Configurações** (`/settings`) no painel e clique em

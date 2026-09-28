@@ -29,6 +29,7 @@ from app.db.models import NotificationSettings, User, UserCredentials
 from app.db.session import get_db
 from app.notifications.service import split_chat_ids
 from app.scraping.item_management import (
+    build_items_list_message,
     build_status_message,
     create_item,
     find_category_by_name,
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 STATUS_KEYWORDS = ("status", "buscas", "busca")
+LIST_KEYWORDS = ("itens", "item", "lista")
 
 HELP_TEXT = (
     "📋 Como usar:\n"
@@ -46,7 +48,8 @@ HELP_TEXT = (
     'com a prioridade no rodízio no fim, separada por vírgula (ex: "Fogão, '
     '1"; 1 = mais prioritário). Sem isso, a prioridade padrão é 2.\n'
     '• Manda "status <nome>" (ex: "status Fogão") pra ver quantas buscas já '
-    "rolaram e o que foi encontrado até agora."
+    "rolaram e o que foi encontrado até agora.\n"
+    '• Manda "itens" pra ver a lista completa do que está sendo monitorado.'
 )
 
 
@@ -100,6 +103,10 @@ async def telegram_webhook(secret: str, request: Request, db: Session = Depends(
 
         if text.strip().lower() in ("ajuda", "help", "?"):
             notifier.send_message(HELP_TEXT, chat_id=chat_id)
+            return {"ok": True}
+
+        if text.strip().lower() in LIST_KEYWORDS:
+            notifier.send_message(build_items_list_message(db, user), chat_id=chat_id)
             return {"ok": True}
 
         first_word, _, rest = text.partition(" ")

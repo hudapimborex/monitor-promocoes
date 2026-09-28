@@ -224,3 +224,38 @@ def test_help_keyword_replies_with_instructions_and_creates_nothing(client, db_s
     assert len(fake_telegram_send) == 1
     assert "status" in fake_telegram_send[0]["text"].lower()
     assert db_session.query(Category).count() == 0
+
+
+def test_itens_keyword_lists_all_items_and_creates_nothing(client, db_session, fake_telegram_send):
+    user = _seed_user_with_chat_id(db_session)
+    db_session.add_all(
+        [
+            Category(user_id=user.id, slug="fogao", name="Fogão", active=True, priority=1),
+            Category(user_id=user.id, slug="cooktop", name="Cooktop", active=False, priority=2),
+        ]
+    )
+    db_session.commit()
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "itens")
+    )
+    assert resp.status_code == 200
+    assert len(fake_telegram_send) == 1
+    text = fake_telegram_send[0]["text"]
+    assert "Fogão" in text
+    assert "Cooktop" in text
+    assert "✅" in text
+    assert "⏸" in text
+    # não cria item nenhum, só lista
+    assert db_session.query(Category).filter_by(user_id=user.id).count() == 2
+
+
+def test_itens_keyword_with_no_items_says_so(client, db_session, fake_telegram_send):
+    _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "itens")
+    )
+    assert resp.status_code == 200
+    assert "Nenhum item" in fake_telegram_send[0]["text"]
+    assert db_session.query(Category).count() == 0

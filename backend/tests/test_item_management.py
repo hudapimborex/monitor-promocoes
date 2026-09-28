@@ -2,6 +2,7 @@ import datetime as dt
 
 from app.db.models import Category, PriceHistory, Product, SearchRun, User
 from app.scraping.item_management import (
+    build_items_list_message,
     build_status_message,
     find_category_by_name,
     parse_name_and_priority,
@@ -105,3 +106,32 @@ def test_build_status_message_includes_latest_price_and_run_count(db_session):
     assert "1 produto(s)" in message
     assert "899" in message
     assert "loja.com" in message
+
+
+def test_build_items_list_message_orders_by_priority_then_name(db_session):
+    user = User(email="itemmgmt6@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+    db_session.add_all(
+        [
+            Category(user_id=user.id, slug="b", name="B Item", active=True, priority=2),
+            Category(user_id=user.id, slug="a", name="A Item", active=False, priority=1),
+        ]
+    )
+    db_session.commit()
+
+    message = build_items_list_message(db_session, user)
+    lines = message.splitlines()
+    assert "A Item" in lines[1]
+    assert "⏸" in lines[1]
+    assert "B Item" in lines[2]
+    assert "✅" in lines[2]
+
+
+def test_build_items_list_message_when_empty(db_session):
+    user = User(email="itemmgmt7@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+
+    message = build_items_list_message(db_session, user)
+    assert "Nenhum item" in message

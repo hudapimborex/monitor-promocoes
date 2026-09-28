@@ -144,6 +144,26 @@ def build_status_message(db: Session, category: Category) -> str:
     return "\n".join(lines)
 
 
+def build_items_list_message(db: Session, user: User) -> str:
+    """Lista todos os itens do usuário com status/prioridade — usado no
+    comando "itens" do webhook do Telegram, pra ver o rodízio atual sem
+    abrir o painel."""
+    categories = (
+        db.query(Category)
+        .filter(Category.user_id == user.id)
+        .order_by(Category.priority.asc(), Category.name.asc())
+        .all()
+    )
+    if not categories:
+        return "Nenhum item cadastrado ainda — manda o nome de um item pra começar."
+
+    lines = [f"📋 Seus itens ({len(categories)}):"]
+    for category in categories:
+        icon = "✅" if category.active else "⏸"
+        lines.append(f"{icon} {category.name} (prioridade {category.priority})")
+    return "\n".join(lines)
+
+
 def delete_item_cascade(db: Session, category: Category) -> None:
     """Apaga o item de vez — incluindo todo histórico de preço, alertas e
     cupons ligados aos produtos encontrados nele. Irreversível; não faz
