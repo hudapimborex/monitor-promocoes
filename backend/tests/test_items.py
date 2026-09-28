@@ -106,6 +106,54 @@ def test_toggle_item_flips_active(client, db_session):
     assert category.active is True
 
 
+def test_toggle_nonexistent_item_redirects_with_friendly_error(client, db_session):
+    _seed_and_login(client, db_session)
+    resp = client.post("/items/99999/toggle")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/items?error=item_nao_encontrado"
+
+
+def test_delete_nonexistent_item_is_idempotent_not_an_error(client, db_session):
+    _seed_and_login(client, db_session)
+    resp = client.post("/items/99999/delete")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/items?deleted=1"
+
+
+def test_delete_already_deleted_item_on_second_click_still_redirects_cleanly(client, db_session):
+    user = _seed_and_login(client, db_session)
+    category = Category(user_id=user.id, slug="dobro-clique", name="Item", active=True)
+    db_session.add(category)
+    db_session.commit()
+    category_id = category.id
+
+    first = client.post(f"/items/{category_id}/delete")
+    assert first.headers["location"] == "/items?deleted=1"
+
+    second = client.post(f"/items/{category_id}/delete")
+    assert second.status_code == 303
+    assert second.headers["location"] == "/items?deleted=1"
+
+
+def test_toggle_or_delete_item_belonging_to_another_user_is_treated_as_not_found(client, db_session):
+    _seed_and_login(client, db_session)
+
+    other_user = User(email="other@example.com", hashed_password=hash_password("outro123"))
+    db_session.add(other_user)
+    db_session.commit()
+    other_category = Category(user_id=other_user.id, slug="nao-meu", name="Não Meu", active=True)
+    db_session.add(other_category)
+    db_session.commit()
+
+    toggle_resp = client.post(f"/items/{other_category.id}/toggle")
+    assert toggle_resp.headers["location"] == "/items?error=item_nao_encontrado"
+
+    delete_resp = client.post(f"/items/{other_category.id}/delete")
+    assert delete_resp.headers["location"] == "/items?deleted=1"
+    # o item do outro usuário continua intacto, não foi apagado de verdade
+    assert db_session.query(Category).filter_by(id=other_category.id).first() is not None
+
+
 def test_delete_item_without_history_removes_it(client, db_session):
     user = _seed_and_login(client, db_session)
     category = Category(user_id=user.id, slug="fechadura", name="Fechadura", active=True)

@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -122,7 +122,10 @@ def toggle_item(
 ):
     category = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if category is None:
-        raise HTTPException(status_code=404, detail="Item não encontrado")
+        # Provavelmente clique duplo ou aba desatualizada num item que já
+        # foi apagado — volta pro painel com um aviso em vez de uma página
+        # de erro crua.
+        return RedirectResponse(url="/items?error=item_nao_encontrado", status_code=303)
     category.active = not category.active
     db.commit()
     return RedirectResponse(url="/items", status_code=303)
@@ -140,7 +143,9 @@ def delete_item(
     """
     category = db.query(Category).filter(Category.id == item_id, Category.user_id == user.id).first()
     if category is None:
-        raise HTTPException(status_code=404, detail="Item não encontrado")
+        # Idempotente na prática: se já foi apagado (clique duplo, aba
+        # desatualizada), trata como sucesso em vez de mostrar erro cru.
+        return RedirectResponse(url="/items?deleted=1", status_code=303)
 
     product_ids = [
         pid for (pid,) in db.query(Product.id).filter(Product.category_id == category.id).all()

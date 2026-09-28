@@ -11,6 +11,7 @@
 {% if added %}<div class="flash ok">Item adicionado.</div>{% endif %}
 {% if deleted %}<div class="flash ok">Item removido (junto com todo o histórico de preço, alertas e cupons dele).</div>{% endif %}
 {% if error == "nome_vazio" %}<div class="flash err">Digite um nome pro item.</div>{% endif %}
+{% if error == "item_nao_encontrado" %}<div class="flash err">Esse item já não existe mais (provavelmente já foi apagado antes) — a lista abaixo está atualizada.</div>{% endif %}
 
 <h2>Adicionar item</h2>
 <form method="post" action="/items" class="form-card">
