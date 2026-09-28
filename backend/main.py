@@ -18,6 +18,7 @@ from app.web.items_routes import router as items_router
 from app.web.login_routes import router as login_router
 from app.web.routes import router as web_router
 from app.web.settings_routes import router as settings_router
+from app.web.telegram_webhook import router as telegram_webhook_router
 
 install_live_log_handler()
 
@@ -28,6 +29,7 @@ app.include_router(subscribe_router)
 app.include_router(login_router)
 app.include_router(settings_router)
 app.include_router(items_router)
+app.include_router(telegram_webhook_router)
 app.include_router(web_router)
 
 

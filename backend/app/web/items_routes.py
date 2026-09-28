@@ -16,29 +16,13 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.core.formatting import slugify
 from app.db.models import Category, Coupon, PriceAlert, PriceHistory, Product, SearchRun, User
 from app.db.session import get_db
+from app.scraping.item_management import DEFAULT_DISCOUNT_TERMS, create_item as create_item_row
 from app.web.auth_web import get_current_web_user
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
-
-DEFAULT_DISCOUNT_TERMS = "promoção, desconto, oferta"
-
-
-def _split_terms(raw: str) -> list:
-    return [t.strip() for t in raw.split(",") if t.strip()]
-
-
-def _unique_slug(db: Session, user_id: int, base_slug: str) -> str:
-    slug = base_slug
-    n = 2
-    existing = {c.slug for c in db.query(Category.slug).filter(Category.user_id == user_id).all()}
-    while slug in existing:
-        slug = f"{base_slug}-{n}"
-        n += 1
-    return slug
 
 
 @router.get("/items")
@@ -96,21 +80,7 @@ def create_item(
     if not name:
         return RedirectResponse(url="/items?error=nome_vazio", status_code=303)
 
-    slug = _unique_slug(db, user.id, slugify(name))
-    category = Category(
-        user_id=user.id,
-        slug=slug,
-        name=name,
-        priority=max(1, priority),
-        active=True,
-        keywords_json={
-            "base_terms": [name],
-            "discount_terms": _split_terms(discount_terms) or _split_terms(DEFAULT_DISCOUNT_TERMS),
-            "sizes": _split_terms(sizes),
-        },
-    )
-    db.add(category)
-    db.commit()
+    create_item_row(db, user, name, discount_terms=discount_terms, sizes=sizes, priority=priority)
     return RedirectResponse(url="/items?added=1", status_code=303)
 
 

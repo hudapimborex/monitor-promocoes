@@ -164,6 +164,16 @@ cd backend
 4. Cole o token e o chat_id em **Configurações** (`/settings`) no painel —
    ou em `TELEGRAM_BOT_TOKEN`/`TELEGRAM_DEFAULT_CHAT_ID` no `.env`.
 
+### Adicionar item mandando mensagem pro bot (só na nuvem)
+
+Além de receber alertas, o bot também aceita comando: mande o nome de um
+item direto pra ele (ex: `Fogão`) que ele já cria como novo item de busca e
+confirma de volta. Só funciona pra chat_ids já configurados em
+Configurações (qualquer outro é ignorado). Precisa do webhook registrado
+uma vez — `python scripts/register_telegram_webhook.py` — e só funciona no
+deploy na nuvem (o `.exe` local roda em `127.0.0.1`, sem endereço público
+que o Telegram consiga chamar).
+
 ## Custos
 
 ### Comparação de APIs de busca (dados verificados em ago/2026)
