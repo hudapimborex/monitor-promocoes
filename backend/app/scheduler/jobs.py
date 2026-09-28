@@ -17,7 +17,7 @@ from app.core.run_state import finish_run, is_cancelled, is_paused, start_run
 from app.core.user_credentials import build_firecrawl_client, build_telegram_notifier
 from app.db.models import SearchRun, User
 from app.db.session import session_scope
-from app.notifications.service import notify_alert
+from app.notifications.service import notify_alert, notify_status
 from app.notifications.telegram import TelegramNotifier
 from app.pricing.service import check_product_for_drop
 from app.scraping.firecrawl_client import FirecrawlError
@@ -60,10 +60,19 @@ def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotif
             )
             return stats
 
+        total_queries = sum(len(p.queries) for p in plans)
         logger.info(
             "▶ Iniciando busca: %d categoria(s) hoje — %s",
             len(plans),
             ", ".join(p.category.name for p in plans),
+        )
+        notify_status(
+            db,
+            user.id,
+            "🔎 Começando a busca de hoje: "
+            + ", ".join(p.category.name for p in plans)
+            + f"\n{total_queries} busca(s) planejada(s) no total.",
+            notifier=notifier,
         )
 
         cancelled = False
@@ -145,27 +154,21 @@ def run_search_for_user(db: Session, user: User, client, notifier: TelegramNotif
                     )
                     notify_alert(db, outcome.product, alert, notifier=notifier)
 
+        summary = (
+            f"{stats['queries']} busca(s) feita(s), {stats['results']} resultado(s), "
+            f"{stats['prices_recorded']} preço(s) gravado(s), {stats['alerts']} alerta(s) de queda, "
+            f"{stats['coupons_found']} cupom(ns) encontrado(s)."
+        )
+        if stats["errors"]:
+            summary += f"\n⚠️ {stats['errors']} busca(s) falharam."
+
         if cancelled:
             stats["cancelled"] = True
-            logger.info(
-                "🏁 Busca interrompida: %d query(s), %d resultado(s), %d preço(s) gravado(s), "
-                "%d alerta(s), %d cupom(ns)",
-                stats["queries"],
-                stats["results"],
-                stats["prices_recorded"],
-                stats["alerts"],
-                stats["coupons_found"],
-            )
+            logger.info("🏁 Busca interrompida: %s", summary)
+            notify_status(db, user.id, f"⏹ Busca interrompida.\n{summary}", notifier=notifier)
         else:
-            logger.info(
-                "🏁 Busca concluída: %d query(s), %d resultado(s), %d preço(s) gravado(s), "
-                "%d alerta(s), %d cupom(ns)",
-                stats["queries"],
-                stats["results"],
-                stats["prices_recorded"],
-                stats["alerts"],
-                stats["coupons_found"],
-            )
+            logger.info("🏁 Busca concluída: %s", summary)
+            notify_status(db, user.id, f"🏁 Busca concluída.\n{summary}", notifier=notifier)
         return stats
     finally:
         finish_run()

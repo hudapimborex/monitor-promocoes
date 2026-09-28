@@ -23,7 +23,11 @@ real implementada ainda.
    pelo menos `PRICE_MIN_STABLE_DAYS` dias — isso filtra "promoções" que na
    verdade são o preço de sempre (ver `app/pricing/detector.py`).
 4. Alertas confirmados são enviados no Telegram e ficam visíveis no painel
-   web (`main.py`) e no export CSV.
+   web (`main.py`) e no export CSV. O bot também manda uma mensagem de
+   status no começo ("🔎 Começando a busca de hoje...") e no fim de cada
+   rodada ("🏁 Busca concluída: X busca(s), Y preço(s) gravado(s), Z
+   alerta(s), C cupom(ns)"), pra dar visibilidade mesmo quando não acha
+   nenhuma promoção nova (ver `app/scheduler/jobs.py`).
 5. Em paralelo, o mesmo texto raspado (`app/scraping/coupon_parser.py`) é
    varrido atrás de código de cupom — de graça, sem custo extra de crédito —
    e a busca também inclui sites agregadores de cupom dedicados
@@ -176,7 +180,17 @@ Pra ativar, entre em **Configurações** (`/settings`) no painel e clique em
 Token antes) — o próprio servidor registra a URL do webhook usando o token
 já salvo, sem precisar rodar nada por fora. Só funciona no deploy na nuvem
 (o `.exe` local roda em `127.0.0.1`, sem endereço público que o Telegram
-consiga chamar). Alternativa por linha de comando, se preferir:
+consiga chamar).
+
+Se mandar uma mensagem e não chegar resposta nenhuma, tem uma página de
+diagnóstico em Configurações → "Mandei mensagem e não recebi resposta — o
+que houve?" (`/settings/telegram-diagnostico`) que consulta o próprio
+Telegram (`getWebhookInfo`) e mostra se o webhook está registrado
+corretamente, se teve erro na última entrega e quais chat_ids estão
+autorizados a adicionar item — pra comparar com o número que mandou a
+mensagem.
+
+Alternativa por linha de comando, se preferir:
 `python scripts/register_telegram_webhook.py` (precisa de `TELEGRAM_BOT_TOKEN`
 e `JWT_SECRET` iguais aos de produção no `.env` local).
 

@@ -71,7 +71,10 @@ def test_run_search_for_user_records_price_without_alert_on_first_observation(db
     assert stats["results"] == 1
     assert stats["prices_recorded"] == 1
     assert stats["alerts"] == 0  # primeira observação: sem baseline, não pode confirmar queda
-    assert sent == []
+    assert not any("Queda de preço confirmada" in m for m in sent)
+    # manda status de início e fim da busca, mesmo sem alerta nenhum
+    assert any("Começando a busca" in m for m in sent)
+    assert any("Busca concluída" in m for m in sent)
 
     products = db_session.query(Product).filter_by(user_id=user.id).all()
     assert len(products) == 1
@@ -135,7 +138,9 @@ def test_run_search_for_user_creates_and_sends_alert_on_real_drop(db_session, mo
     stats = run_search_for_user(db_session, user, client, notifier)
 
     assert stats["alerts"] == 1
-    assert len(sent) == 1
+    assert sum("Queda de preço confirmada" in m for m in sent) == 1
+    assert any("Começando a busca" in m for m in sent)
+    assert any("Busca concluída" in m for m in sent)
 
     alerts = db_session.query(PriceAlert).filter_by(product_id=product.id).all()
     assert len(alerts) == 1

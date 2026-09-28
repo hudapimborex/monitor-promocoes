@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.formatting import mask_secret
 from app.core.security import hash_password, verify_password
 from app.core.user_credentials import build_telegram_notifier
-from app.db.models import User, UserCredentials
+from app.db.models import NotificationSettings, User, UserCredentials
 from app.db.session import get_db
 from app.web.auth_web import get_current_web_user
 from app.web.telegram_webhook import webhook_secret
@@ -109,6 +109,13 @@ def change_password(
     return RedirectResponse(url="/settings?saved=password", status_code=303)
 
 
+def _expected_webhook_url(request: Request) -> str:
+    base_url = str(request.base_url).rstrip("/")
+    if base_url.startswith("http://"):
+        base_url = "https://" + base_url[len("http://") :]
+    return f"{base_url}/telegram/webhook/{webhook_secret()}"
+
+
 @router.post("/settings/telegram-webhook")
 def register_telegram_webhook(
     request: Request,
@@ -123,10 +130,7 @@ def register_telegram_webhook(
     if not notifier.is_configured:
         return RedirectResponse(url="/settings?error=telegram_nao_configurado", status_code=303)
 
-    base_url = str(request.base_url).rstrip("/")
-    if base_url.startswith("http://"):
-        base_url = "https://" + base_url[len("http://") :]
-    webhook_url = f"{base_url}/telegram/webhook/{webhook_secret()}"
+    webhook_url = _expected_webhook_url(request)
 
     try:
         resp = httpx.post(
@@ -144,3 +148,86 @@ def register_telegram_webhook(
         return RedirectResponse(url="/settings?error=telegram_webhook_falhou", status_code=303)
 
     return RedirectResponse(url="/settings?saved=webhook", status_code=303)
+
+
+@router.get("/settings/telegram-diagnostico")
+def telegram_diagnostico(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_web_user),
+):
+    """Página só de leitura pra descobrir por que uma mensagem mandada pro
+    bot não gerou resposta: consulta o getWebhookInfo do Telegram (mostra se
+    ele tentou entregar e se deu erro) e mostra os chat_ids que estão
+    autorizados a adicionar item, pra comparar com o número que mandou a
+    mensagem."""
+    creds = _get_or_create_credentials(db, user.id)
+    notif = db.query(NotificationSettings).filter(NotificationSettings.user_id == user.id).first()
+    notifier = build_telegram_notifier(db, user.id)
+
+    diagnosis = []
+    webhook_info = None
+
+    if not notifier.is_configured:
+        diagnosis.append("Nenhum Telegram Bot Token salvo — preencha e salve antes de mais nada.")
+    else:
+        try:
+            resp = httpx.get(
+                f"https://api.telegram.org/bot{notifier.bot_token}/getWebhookInfo", timeout=15
+            )
+            data = resp.json()
+        except httpx.HTTPError:
+            logger.exception("Erro ao consultar getWebhookInfo do Telegram")
+            diagnosis.append("Não consegui consultar o Telegram agora — tenta de novo em instantes.")
+            data = None
+
+        if data and data.get("ok"):
+            webhook_info = data.get("result") or {}
+            expected_url = _expected_webhook_url(request)
+            registered_url = webhook_info.get("url") or ""
+
+            if not registered_url:
+                diagnosis.append(
+                    "Nenhum webhook registrado no Telegram agora. Clique em "
+                    "\"Ativar / atualizar webhook do Telegram\" acima."
+                )
+            elif registered_url != expected_url:
+                diagnosis.append(
+                    "O webhook registrado aponta pra uma URL diferente da esperada — "
+                    "clique em \"Ativar / atualizar webhook do Telegram\" de novo pra corrigir."
+                )
+            else:
+                diagnosis.append("Webhook registrado corretamente, apontando pra esse deploy.")
+
+            if webhook_info.get("last_error_message"):
+                diagnosis.append(
+                    f"O Telegram reportou um erro na última tentativa de entrega: "
+                    f"\"{webhook_info['last_error_message']}\"."
+                )
+            if webhook_info.get("pending_update_count", 0) > 0:
+                diagnosis.append(
+                    f"Tem {webhook_info['pending_update_count']} mensagem(ns) esperando ser "
+                    "entregue(s) ainda — o Telegram está tentando reenviar."
+                )
+        elif data:
+            diagnosis.append(f"Telegram recusou a consulta: {data.get('description', 'erro desconhecido')}.")
+
+    authorized_chat_ids = sorted(
+        {c.strip() for c in (creds.telegram_chat_id or "").split(",") if c.strip()}
+        | {c.strip() for c in ((notif.telegram_chat_id if notif else "") or "").split(",") if c.strip()}
+    )
+    if notifier.is_configured and not authorized_chat_ids:
+        diagnosis.append(
+            "Nenhum chat_id autorizado salvo — mesmo com o webhook certo, mensagens de qualquer "
+            "número são ignoradas sem isso. Preencha o campo \"Telegram Chat ID\" acima."
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "telegram_diagnostico.html",
+        {
+            "diagnosis": diagnosis,
+            "webhook_info": webhook_info,
+            "authorized_chat_ids": authorized_chat_ids,
+        },
+    )

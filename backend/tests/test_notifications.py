@@ -8,6 +8,7 @@ from app.notifications.service import (
     format_alert_message,
     notify_alert,
     notify_pending_alerts,
+    notify_status,
     split_chat_ids,
 )
 from app.notifications.telegram import TelegramNotifier
@@ -236,3 +237,64 @@ def test_notify_pending_alerts_sends_all_unsent(db_session, monkeypatch):
 
     assert count == 2
     assert len(sent_calls) == 2
+
+
+def test_notify_status_sends_to_all_configured_chat_ids(db_session, monkeypatch):
+    user = User(email="status@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+    db_session.add(NotificationSettings(user_id=user.id, telegram_chat_id="111, 222"))
+    db_session.commit()
+
+    sent_to = []
+
+    def fake_post(self, url, json=None, **kwargs):
+        sent_to.append((json["chat_id"], json["text"]))
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    notifier = TelegramNotifier(bot_token="fake-token")
+    sent = notify_status(db_session, user.id, "🔎 Começando a busca de hoje", notifier=notifier)
+
+    assert sent is True
+    assert sorted(chat_id for chat_id, _ in sent_to) == ["111", "222"]
+    assert all(text == "🔎 Começando a busca de hoje" for _, text in sent_to)
+
+
+def test_notify_status_returns_false_without_any_chat_id(db_session, monkeypatch):
+    user = User(email="status2@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+
+    calls = []
+    monkeypatch.setattr(
+        httpx.Client, "post", lambda self, url, json=None, **kwargs: calls.append(1)
+    )
+
+    notifier = TelegramNotifier(bot_token="fake-token", default_chat_id="")
+    sent = notify_status(db_session, user.id, "oi", notifier=notifier)
+
+    assert sent is False
+    assert calls == []
+
+
+def test_notify_status_respects_disabled_telegram_channel(db_session, monkeypatch):
+    user = User(email="status3@example.com", hashed_password="x")
+    db_session.add(user)
+    db_session.commit()
+    db_session.add(
+        NotificationSettings(user_id=user.id, telegram_chat_id="111", channels_enabled_json=["dashboard"])
+    )
+    db_session.commit()
+
+    calls = []
+    monkeypatch.setattr(
+        httpx.Client, "post", lambda self, url, json=None, **kwargs: calls.append(1)
+    )
+
+    notifier = TelegramNotifier(bot_token="fake-token")
+    sent = notify_status(db_session, user.id, "oi", notifier=notifier)
+
+    assert sent is False
+    assert calls == []

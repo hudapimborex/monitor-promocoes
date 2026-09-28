@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/settings">&larr; voltar pra Configurações</a></p>
+<h1>Diagnóstico do webhook do Telegram</h1>
+
+<h2>O que está acontecendo</h2>
+<ul>
+  {% for line in diagnosis %}
+  <li>{{ line }}</li>
+  {% endfor %}
+</ul>
+
+<h2>Chat_ids autorizados a adicionar item</h2>
+{% if authorized_chat_ids %}
+<p>Compare com o número que você usou pra mandar a mensagem pro bot (sem espaço, exatamente igual):</p>
+<ul>
+  {% for chat_id in authorized_chat_ids %}
+  <li><code>{{ chat_id }}</code></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">Nenhum chat_id salvo ainda.</p>
+{% endif %}
+
+{% if webhook_info %}
+<h2>Detalhes técnicos (getWebhookInfo do Telegram)</h2>
+<table>
+  <tr><td class="muted">URL registrada</td><td><code>{{ webhook_info.url or "—" }}</code></td></tr>
+  <tr><td class="muted">Mensagens pendentes</td><td>{{ webhook_info.pending_update_count }}</td></tr>
+  <tr><td class="muted">Último erro</td><td>{{ webhook_info.last_error_message or "nenhum" }}</td></tr>
+  <tr><td class="muted">IP usado pelo Telegram</td><td>{{ webhook_info.ip_address or "—" }}</td></tr>
+</table>
+{% endif %}
+{% endblock %}

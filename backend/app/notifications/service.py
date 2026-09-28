@@ -81,6 +81,33 @@ def notify_alert(
     return sent
 
 
+def notify_status(db: Session, user_id: int, text: str, notifier: Optional[TelegramNotifier] = None) -> bool:
+    """Manda uma mensagem de status (início/fim de busca) pra todos os
+    chat_ids configurados do usuário — mesma lista usada pros alertas de
+    queda de preço, mas sem marcar nada como "notificado" (não é ligado a
+    um PriceAlert)."""
+    notifier = notifier or TelegramNotifier()
+
+    settings_row = db.query(NotificationSettings).filter_by(user_id=user_id).first()
+    chat_id_raw = (settings_row.telegram_chat_id if settings_row else None) or notifier.default_chat_id
+    channels = settings_row.channels_enabled_json if settings_row else ["telegram", "dashboard"]
+
+    if "telegram" not in (channels or []):
+        return False
+
+    chat_ids = split_chat_ids(chat_id_raw)
+    if not chat_ids:
+        return False
+
+    sent = False
+    for chat_id in chat_ids:
+        if notifier.send_message(text, chat_id=chat_id):
+            sent = True
+        else:
+            logger.error("Falha ao enviar status pro chat_id %s", chat_id)
+    return sent
+
+
 def notify_pending_alerts(db: Session, user_id: int, notifier: Optional[TelegramNotifier] = None) -> int:
     """Envia todos os alertas ainda não notificados de um usuário. Retorna quantos foram enviados."""
     notifier = notifier or TelegramNotifier()
