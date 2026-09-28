@@ -99,7 +99,22 @@ def test_unauthorized_chat_id_does_not_create_item(client, db_session, fake_tele
     )
     assert resp.status_code == 200
     assert db_session.query(Category).count() == 0
-    assert fake_telegram_send == []
+    # o estranho não recebe resposta nenhuma — só o dono é avisado (ver teste abaixo)
+    assert all(m["chat_id"] != "222222222" for m in fake_telegram_send)
+
+
+def test_unauthorized_chat_id_notifies_owner_with_the_chat_id(client, db_session, fake_telegram_send):
+    _seed_user_with_chat_id(db_session, chat_id="111")
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("222222222", "Item suspeito")
+    )
+    assert resp.status_code == 200
+
+    owner_messages = [m for m in fake_telegram_send if m["chat_id"] == "111"]
+    assert len(owner_messages) == 1
+    assert "222222222" in owner_messages[0]["text"]
+    assert "Item suspeito" in owner_messages[0]["text"]
 
 
 def test_command_text_is_ignored(client, db_session, fake_telegram_send):

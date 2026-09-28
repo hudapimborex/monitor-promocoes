@@ -173,7 +173,10 @@ cd backend
 Além de receber alertas, o bot também aceita comando: mande o nome de um
 item direto pra ele (ex: `Fogão`) que ele já cria como novo item de busca e
 confirma de volta. Só funciona pra chat_ids já configurados em
-Configurações (qualquer outro é ignorado).
+Configurações — mensagem de um chat_id não autorizado não cria nada nem
+recebe resposta, mas o dono do bot recebe um aviso com o chat_id de quem
+mandou (e a mensagem), pra poder colar esse número em Configurações se
+quiser autorizar.
 
 - **Checagem imediata**: todo item novo já dispara uma busca de verdade na
   hora (algumas queries, limitadas pra não estourar o orçamento mensal de

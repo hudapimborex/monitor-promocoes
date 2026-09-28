@@ -5,8 +5,9 @@ na hora, e uma prioridade opcional no fim do nome (separada por vírgula) na
 hora de adicionar. Item novo já dispara uma checagem imediata sozinho.
 
 Só aceita mensagem vinda de um chat_id que já está configurado em
-Configurações pra receber alertas — qualquer outra é ignorada (sem
-resposta), pra não deixar estranho adicionando item na sua lista.
+Configurações pra receber alertas — outra não cria nada nem recebe
+resposta (pra não deixar estranho adicionando item na sua lista), mas
+avisa o dono do bot com o chat_id de quem mandou, pra autorizar se quiser.
 
 A URL do webhook tem um segredo no caminho (derivado do JWT_SECRET, que já
 existe) em vez de depender de outra variável de ambiente nova — só o
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from html import escape
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -28,7 +30,7 @@ from app.core.config import get_settings
 from app.core.user_credentials import build_telegram_notifier
 from app.db.models import NotificationSettings, User, UserCredentials
 from app.db.session import get_db
-from app.notifications.service import split_chat_ids
+from app.notifications.service import notify_status, split_chat_ids
 from app.scheduler.jobs import run_immediate_check
 from app.scraping.item_management import (
     build_items_list_message,
@@ -82,6 +84,17 @@ def find_user_by_telegram_chat_id(db: Session, chat_id: str) -> Optional[User]:
     return None
 
 
+def find_owner_user(db: Session) -> Optional[User]:
+    """"Dono" do bot pra fins de aviso de tentativa não autorizada — o
+    usuário que tem um Telegram Bot Token configurado (na prática, só existe
+    um nessa versão do app). Cai pro primeiro usuário cadastrado se nenhuma
+    credencial de bot foi salva ainda."""
+    creds = db.query(UserCredentials).filter(UserCredentials.telegram_bot_token.isnot(None)).first()
+    if creds is not None:
+        return db.query(User).filter(User.id == creds.user_id).first()
+    return db.query(User).first()
+
+
 @router.post("/telegram/webhook/{secret}")
 async def telegram_webhook(
     secret: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
@@ -105,6 +118,20 @@ async def telegram_webhook(
         user = find_user_by_telegram_chat_id(db, chat_id)
         if user is None:
             logger.info("Telegram webhook: chat_id %s não autorizado, ignorando.", chat_id)
+            owner = find_owner_user(db)
+            if owner is not None:
+                owner_notifier = build_telegram_notifier(db, owner.id)
+                preview = escape(text[:200])
+                notify_status(
+                    db,
+                    owner.id,
+                    "📩 Alguém mandou mensagem pro bot mas o chat_id não está autorizado a "
+                    f"adicionar item.\nChat ID: <code>{escape(chat_id)}</code>\n"
+                    f'Mensagem: "{preview}"\n\n'
+                    'Se for confiável, adicione esse número em Configurações (campo "Telegram '
+                    'Chat ID", separado por vírgula do(s) que já tem).',
+                    notifier=owner_notifier,
+                )
             return {"ok": True}
 
         notifier = build_telegram_notifier(db, user.id)
