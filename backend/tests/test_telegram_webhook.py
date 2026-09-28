@@ -33,6 +33,23 @@ def fake_telegram_send(monkeypatch):
     return sent
 
 
+@pytest.fixture()
+def fake_immediate_check(monkeypatch):
+    """Mocka a checagem imediata (BackgroundTask) — ela abre sua própria
+    sessão de banco (session_scope), separada da sessão isolada de teste, e
+    de fato chamaria a Firecrawl; nos testes do webhook só queremos
+    confirmar que ela foi agendada com os IDs certos, não executá-la.
+    Como o TestClient roda BackgroundTasks antes de devolver a resposta,
+    sem esse mock o teste chamaria código de rede/DB de verdade."""
+    calls = []
+
+    def fake_run(user_id, category_id, max_queries=5):
+        calls.append({"user_id": user_id, "category_id": category_id})
+
+    monkeypatch.setattr("app.web.telegram_webhook.run_immediate_check", fake_run)
+    return calls
+
+
 def _seed_user_with_chat_id(db_session, chat_id="999888777", email="webhook@example.com"):
     user = User(email=email, hashed_password="x")
     db_session.add(user)
@@ -51,7 +68,9 @@ def test_wrong_secret_returns_404(client, db_session):
     assert resp.status_code == 404
 
 
-def test_authorized_chat_creates_item_and_confirms(client, db_session, fake_telegram_send):
+def test_authorized_chat_creates_item_and_confirms(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
     user = _seed_user_with_chat_id(db_session)
 
     resp = client.post(
@@ -67,6 +86,9 @@ def test_authorized_chat_creates_item_and_confirms(client, db_session, fake_tele
     assert len(fake_telegram_send) == 1
     assert fake_telegram_send[0]["chat_id"] == "999888777"
     assert "Fogão" in fake_telegram_send[0]["text"]
+
+    # item novo dispara a checagem imediata em background
+    assert fake_immediate_check == [{"user_id": user.id, "category_id": category.id}]
 
 
 def test_unauthorized_chat_id_does_not_create_item(client, db_session, fake_telegram_send):
@@ -101,7 +123,9 @@ def test_empty_text_is_ignored(client, db_session):
     assert db_session.query(Category).count() == 0
 
 
-def test_second_chat_id_in_comma_separated_list_is_also_authorized(client, db_session, fake_telegram_send):
+def test_second_chat_id_in_comma_separated_list_is_also_authorized(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
     user = _seed_user_with_chat_id(db_session, chat_id="111111111, 222222222")
 
     resp = client.post(
@@ -120,7 +144,9 @@ def test_malformed_payload_does_not_crash(client, db_session):
     assert resp.status_code == 200
 
 
-def test_adding_item_with_priority_suffix(client, db_session, fake_telegram_send):
+def test_adding_item_with_priority_suffix(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
     user = _seed_user_with_chat_id(db_session)
 
     resp = client.post(
@@ -135,7 +161,9 @@ def test_adding_item_with_priority_suffix(client, db_session, fake_telegram_send
     assert "prioridade 1" in fake_telegram_send[0]["text"]
 
 
-def test_adding_item_without_priority_suffix_uses_default(client, db_session, fake_telegram_send):
+def test_adding_item_without_priority_suffix_uses_default(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
     user = _seed_user_with_chat_id(db_session)
 
     resp = client.post(
@@ -148,7 +176,9 @@ def test_adding_item_without_priority_suffix_uses_default(client, db_session, fa
     assert "prioridade 2" in fake_telegram_send[0]["text"]
 
 
-def test_name_with_trailing_non_numeric_comma_is_kept_as_is(client, db_session, fake_telegram_send):
+def test_name_with_trailing_non_numeric_comma_is_kept_as_is(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
     user = _seed_user_with_chat_id(db_session)
 
     resp = client.post(
@@ -259,3 +289,34 @@ def test_itens_keyword_with_no_items_says_so(client, db_session, fake_telegram_s
     assert resp.status_code == 200
     assert "Nenhum item" in fake_telegram_send[0]["text"]
     assert db_session.query(Category).count() == 0
+
+
+def test_buscar_command_triggers_immediate_check_for_existing_item(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
+    user = _seed_user_with_chat_id(db_session)
+    category = Category(user_id=user.id, slug="fogao", name="Fogão", active=True, priority=1)
+    db_session.add(category)
+    db_session.commit()
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "buscar Fogão")
+    )
+    assert resp.status_code == 200
+    assert "Fogão" in fake_telegram_send[0]["text"]
+    assert fake_immediate_check == [{"user_id": user.id, "category_id": category.id}]
+    # não cria item novo, só dispara a checagem do que já existe
+    assert db_session.query(Category).filter_by(user_id=user.id).count() == 1
+
+
+def test_buscar_command_for_unknown_item_replies_not_found_and_does_not_check(
+    client, db_session, fake_telegram_send, fake_immediate_check
+):
+    _seed_user_with_chat_id(db_session)
+
+    resp = client.post(
+        f"/telegram/webhook/{webhook_secret()}", json=_telegram_update("999888777", "buscar Geladeira")
+    )
+    assert resp.status_code == 200
+    assert "Geladeira" in fake_telegram_send[0]["text"]
+    assert fake_immediate_check == []

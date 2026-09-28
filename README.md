@@ -175,6 +175,11 @@ item direto pra ele (ex: `Fogão`) que ele já cria como novo item de busca e
 confirma de volta. Só funciona pra chat_ids já configurados em
 Configurações (qualquer outro é ignorado).
 
+- **Checagem imediata**: todo item novo já dispara uma busca de verdade na
+  hora (algumas queries, limitadas pra não estourar o orçamento mensal de
+  créditos) — o bot manda um resumo assim que termina, sem esperar o
+  rodízio diário. Pra forçar isso de novo num item que já existe, manda
+  `buscar <nome>` (ex: `buscar Fogão`).
 - **Prioridade no rodízio**: coloque a prioridade depois de uma vírgula no
   fim do nome — ex: `Fogão, 1` (1 = mais prioritário; sem isso, o padrão é
   2). Ver `app/scraping/quota.py` pra como a prioridade afeta o rodízio.

@@ -1,7 +1,8 @@
 """Webhook do Telegram: deixa adicionar item de busca mandando o nome dele
 direto pro bot, sem precisar abrir o painel. Também aceita "status <nome>"
-pra consultar o que já foi buscado, e uma prioridade opcional no fim do
-nome (separada por vírgula) na hora de adicionar.
+pra consultar o que já foi buscado, "buscar <nome>" pra forçar uma checagem
+na hora, e uma prioridade opcional no fim do nome (separada por vírgula) na
+hora de adicionar. Item novo já dispara uma checagem imediata sozinho.
 
 Só aceita mensagem vinda de um chat_id que já está configurado em
 Configurações pra receber alertas — qualquer outra é ignorada (sem
@@ -19,7 +20,7 @@ import hashlib
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,7 @@ from app.core.user_credentials import build_telegram_notifier
 from app.db.models import NotificationSettings, User, UserCredentials
 from app.db.session import get_db
 from app.notifications.service import split_chat_ids
+from app.scheduler.jobs import run_immediate_check
 from app.scraping.item_management import (
     build_items_list_message,
     build_status_message,
@@ -41,14 +43,18 @@ router = APIRouter()
 
 STATUS_KEYWORDS = ("status", "buscas", "busca")
 LIST_KEYWORDS = ("itens", "item", "lista")
+CHECK_KEYWORDS = ("buscar", "checar", "verificar")
 
 HELP_TEXT = (
     "📋 Como usar:\n"
     '• Manda o nome de um item (ex: "Fogão") pra adicionar — opcionalmente '
     'com a prioridade no rodízio no fim, separada por vírgula (ex: "Fogão, '
-    '1"; 1 = mais prioritário). Sem isso, a prioridade padrão é 2.\n'
+    '1"; 1 = mais prioritário). Sem isso, a prioridade padrão é 2. Item '
+    "novo já dispara uma busca inicial na hora, automaticamente.\n"
     '• Manda "status <nome>" (ex: "status Fogão") pra ver quantas buscas já '
     "rolaram e o que foi encontrado até agora.\n"
+    '• Manda "buscar <nome>" (ex: "buscar Fogão") pra forçar uma checagem '
+    "na internet agora pra um item que já existe.\n"
     '• Manda "itens" pra ver a lista completa do que está sendo monitorado.'
 )
 
@@ -77,7 +83,9 @@ def find_user_by_telegram_chat_id(db: Session, chat_id: str) -> Optional[User]:
 
 
 @router.post("/telegram/webhook/{secret}")
-async def telegram_webhook(secret: str, request: Request, db: Session = Depends(get_db)):
+async def telegram_webhook(
+    secret: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+):
     if secret != webhook_secret():
         # Finge que a rota nem existe pra quem não souber a URL certa.
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
@@ -118,15 +126,26 @@ async def telegram_webhook(secret: str, request: Request, db: Session = Depends(
                 notifier.send_message(build_status_message(db, category), chat_id=chat_id)
             return {"ok": True}
 
+        if first_word.lower() in CHECK_KEYWORDS and rest.strip():
+            category = find_category_by_name(db, user, rest.strip())
+            if category is None:
+                notifier.send_message(f'Não achei nenhum item chamado "{rest.strip()}".', chat_id=chat_id)
+            else:
+                notifier.send_message(f'🔍 Rodando a busca agora pra "{category.name}"...', chat_id=chat_id)
+                background_tasks.add_task(run_immediate_check, user.id, category.id)
+            return {"ok": True}
+
         name, priority = parse_name_and_priority(text)
         category = create_item(db, user, name, priority=priority or 2)
         logger.info('Item "%s" criado via Telegram por chat_id %s.', category.name, chat_id)
 
         notifier.send_message(
             f'✅ Item adicionado: "{category.name}" (prioridade {category.priority}) — '
-            "já entra no rodízio de buscas.",
+            "já entra no rodízio de buscas. 🔍 Rodando uma busca inicial agora, te aviso "
+            "quando terminar.",
             chat_id=chat_id,
         )
+        background_tasks.add_task(run_immediate_check, user.id, category.id)
     except Exception:
         logger.exception("Erro processando mensagem do webhook do Telegram")
 
