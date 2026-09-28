@@ -1,70 +1,12 @@
-# Configuração de categorias e termos de busca.
+# Configuração global do rodízio de busca — NÃO define os itens buscados.
 #
-# O gerador de keywords (app/scraping/query_builder.py) combina
-# base_terms x sizes x discount_terms para montar as queries de cada
-# categoria. `priority` menor = mais prioritário no rodízio diário do
-# gerenciador de cota (app/scraping/quota.py).
-
-categories:
-  - slug: porcelanato
-    name: "Porcelanato"
-    priority: 1
-    base_terms:
-      - "porcelanato"
-    sizes:
-      - "60x60"
-      - "80x80"
-      - "90x90"
-    discount_terms:
-      - "promoção"
-      - "desconto"
-      - "oferta"
-
-  - slug: piso_laminado
-    name: "Piso Laminado"
-    priority: 1
-    base_terms:
-      - "piso laminado"
-    sizes: []
-    discount_terms:
-      - "promoção"
-      - "desconto"
-      - "oferta"
-
-  - slug: piso_vinilico
-    name: "Piso Vinílico"
-    priority: 2
-    base_terms:
-      - "piso vinílico"
-      - "piso vinilico"
-    sizes: []
-    discount_terms:
-      - "promoção"
-      - "desconto"
-      - "oferta"
-
-  - slug: revestimento_ceramico
-    name: "Revestimento Cerâmico"
-    priority: 2
-    base_terms:
-      - "revestimento cerâmico"
-      - "revestimento ceramico"
-    sizes: []
-    discount_terms:
-      - "promoção"
-      - "oferta m²"
-      - "desconto"
-
-  - slug: piso_madeira
-    name: "Piso de Madeira"
-    priority: 3
-    base_terms:
-      - "piso de madeira"
-      - "deck laminado"
-    sizes: []
-    discount_terms:
-      - "promoção"
-      - "desconto"
+# Os itens de busca (categorias) são só os que o usuário adiciona pelo
+# painel ou mandando mensagem pro bot do Telegram (ver
+# app/scraping/item_management.py) — nada é semeado automaticamente daqui
+# (ver app/db/seed.py).
+#
+# `priority` de cada item é definido na hora de criá-lo (painel/Telegram),
+# não aqui.
 
 # Quantas queries a Firecrawl retorna por busca, e quantos dos primeiros
 # resultados têm a página raspada (scrapeOptions) para extrair preço/imagem.
